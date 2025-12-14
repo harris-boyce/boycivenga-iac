@@ -153,10 +153,10 @@ resource "null_resource" "config_file" {
   ]
 
   triggers = {
-    automation_count  = length(var.automations)
-    script_count      = length(var.scripts)
-    scene_count       = length(var.scenes)
-    group_count       = length(var.groups)
+    automation_count   = length(var.automations)
+    script_count       = length(var.scripts)
+    scene_count        = length(var.scenes)
+    group_count        = length(var.groups)
     notification_count = length(var.notifications)
     integration_count  = length(var.integrations)
   }

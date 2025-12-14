@@ -1,6 +1,6 @@
-output "ubiquiti_site_id" {
-  description = "UniFi site ID"
-  value       = module.ubiquiti.site_id
+output "ubiquiti_site_name" {
+  description = "UniFi site name"
+  value       = module.ubiquiti.site_name
 }
 
 output "ubiquiti_networks" {

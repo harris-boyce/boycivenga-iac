@@ -24,10 +24,10 @@ variable "site_name" {
 variable "networks" {
   description = "List of networks to create"
   type = list(object({
-    name    = string
-    purpose = string
-    vlan_id = number
-    subnet  = string
+    name         = string
+    purpose      = string
+    vlan_id      = number
+    subnet       = string
     dhcp_enabled = optional(bool, true)
     dhcp_start   = optional(string)
     dhcp_stop    = optional(string)
@@ -39,14 +39,14 @@ variable "networks" {
 variable "wlans" {
   description = "List of wireless networks to create"
   type = list(object({
-    name               = string
-    security           = string
-    passphrase         = optional(string)
-    network_id         = optional(string)
-    user_group_id      = optional(string)
-    hide_ssid          = optional(bool, false)
-    is_guest           = optional(bool, false)
-    wlan_band          = optional(string, "both")
+    name          = string
+    security      = string
+    passphrase    = optional(string)
+    network_id    = optional(string)
+    user_group_id = optional(string)
+    hide_ssid     = optional(bool, false)
+    is_guest      = optional(bool, false)
+    wlan_band     = optional(string, "both")
   }))
   default = []
 }
@@ -55,6 +55,7 @@ variable "firewall_rules" {
   description = "List of firewall rules to create"
   type = list(object({
     name             = string
+    ruleset          = optional(string, "LAN_IN")
     action           = string
     protocol         = string
     src_network_id   = optional(string)
@@ -71,10 +72,10 @@ variable "firewall_rules" {
 variable "port_profiles" {
   description = "List of port profiles to create"
   type = list(object({
-    name        = string
-    native_vlan = optional(number)
+    name         = string
+    native_vlan  = optional(number)
     tagged_vlans = optional(list(number), [])
-    poe_mode    = optional(string, "auto")
+    poe_mode     = optional(string, "auto")
   }))
   default = []
 }

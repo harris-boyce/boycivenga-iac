@@ -65,7 +65,7 @@ module "automation" {
       name        = "security-away"
       description = "Enable security when away"
       trigger = {
-        platform = "state"
+        platform  = "state"
         entity_id = "binary_sensor.presence"
         to        = "off"
       }

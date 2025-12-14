@@ -2,11 +2,7 @@ provider "unifi" {
   api_url  = var.unifi_api_url
   username = var.unifi_username
   password = var.unifi_password
-}
-
-# Data source to get site information
-data "unifi_site" "main" {
-  name = var.site_name
+  site     = var.site_name
 }
 
 # Create networks
@@ -15,10 +11,9 @@ resource "unifi_network" "networks" {
 
   name    = each.value.name
   purpose = each.value.purpose
-  site    = data.unifi_site.main.name
 
-  vlan_id     = each.value.vlan_id
-  subnet      = each.value.subnet
+  vlan_id = each.value.vlan_id
+  subnet  = each.value.subnet
 
   dhcp_enabled = each.value.dhcp_enabled
   dhcp_start   = each.value.dhcp_start
@@ -33,7 +28,6 @@ resource "unifi_wlan" "wlans" {
   name       = each.value.name
   security   = each.value.security
   passphrase = each.value.passphrase
-  site       = data.unifi_site.main.name
 
   network_id    = each.value.network_id != null ? each.value.network_id : null
   user_group_id = each.value.user_group_id
@@ -47,9 +41,9 @@ resource "unifi_firewall_rule" "rules" {
   for_each = { for rule in var.firewall_rules : rule.name => rule }
 
   name     = each.value.name
+  ruleset  = each.value.ruleset
   action   = each.value.action
   protocol = each.value.protocol
-  site     = data.unifi_site.main.name
 
   src_network_id   = each.value.src_network_id
   src_network_type = each.value.src_network_type
@@ -65,7 +59,6 @@ resource "unifi_port_profile" "profiles" {
   for_each = { for profile in var.port_profiles : profile.name => profile }
 
   name = each.value.name
-  site = data.unifi_site.main.name
 
   native_networkconf_id = each.value.native_vlan != null ? lookup(
     { for k, v in unifi_network.networks : v.vlan_id => v.id },

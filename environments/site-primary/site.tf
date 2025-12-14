@@ -78,9 +78,9 @@ module "ubiquiti" {
       poe_mode     = "auto"
     },
     {
-      name         = "IoT-Device"
-      native_vlan  = 20
-      poe_mode     = "auto"
+      name        = "IoT-Device"
+      native_vlan = 20
+      poe_mode    = "auto"
     }
   ]
 }

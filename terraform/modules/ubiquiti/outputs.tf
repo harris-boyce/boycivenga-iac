@@ -1,11 +1,6 @@
-output "site_id" {
-  description = "ID of the UniFi site"
-  value       = data.unifi_site.main.id
-}
-
 output "site_name" {
   description = "Name of the UniFi site"
-  value       = data.unifi_site.main.name
+  value       = var.site_name
 }
 
 output "network_ids" {
