@@ -1,0 +1,25 @@
+{
+  "name": "IaC DevContainer",
+  "image": "mcr.microsoft.com/devcontainers/base:ubuntu",
+  "features": {
+    "ghcr.io/devcontainers/features/docker-in-docker:2": {},
+    "ghcr.io/devcontainers/features/terraform:1": {},
+    "ghcr.io/devcontainers/features/python:1": {
+      "version": "latest"
+    },
+    "ghcr.io/devcontainers/features/github-cli:1": {}
+  },
+  "postCreateCommand": "pre-commit install",
+  "customizations": {
+    "vscode": {
+      "extensions": [
+        "ms-python.python",
+        "hashicorp.terraform",
+        "redhat.vscode-yaml",
+        "yzhang.markdown-all-in-one",
+        "GitHub.codespaces"
+      ]
+    }
+  },
+  "remoteUser": "vscode"
+}
