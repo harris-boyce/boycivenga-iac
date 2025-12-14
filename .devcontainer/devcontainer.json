@@ -11,7 +11,7 @@
     },
     "ghcr.io/devcontainers/features/github-cli:1": {}
   },
-  "postCreateCommand": "pip install pre-commit && pre-commit install",
+  "postCreateCommand": "bash -c 'pip install pre-commit && pre-commit install || echo \"Warning: pre-commit setup failed\"'",
   "customizations": {
     "vscode": {
       "extensions": [

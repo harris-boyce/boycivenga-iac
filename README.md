@@ -50,7 +50,6 @@ The devcontainer provides:
   - Terraform (`hashicorp.terraform`)
   - YAML (`redhat.vscode-yaml`)
   - Markdown All in One (`yzhang.markdown-all-in-one`)
-  - GitHub Codespaces (`GitHub.codespaces`)
 
 ### Network Connectivity
 
