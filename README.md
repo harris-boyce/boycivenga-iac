@@ -53,6 +53,8 @@ This repository manages infrastructure across multiple sites using a modular Ter
 
 ## 🚀 Quick Start
 
+**New to this repository?** See the [Quick Start Guide](docs/QUICKSTART.md) for step-by-step instructions!
+
 ### Prerequisites
 
 - Terraform >= 1.6.0
