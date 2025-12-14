@@ -1,6 +1,6 @@
 {
   "name": "IaC DevContainer",
-  "image": "mcr.microsoft.com/devcontainers/base:ubuntu",
+  "dockerFile": "Dockerfile",
   "features": {
     "ghcr.io/devcontainers/features/docker-in-docker:2": {},
     "ghcr.io/devcontainers/features/terraform:1": {},
