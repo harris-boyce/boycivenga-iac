@@ -9,7 +9,7 @@
     },
     "ghcr.io/devcontainers/features/github-cli:1": {}
   },
-  "postCreateCommand": "pre-commit install",
+  "postCreateCommand": "pip install pre-commit && pre-commit install",
   "customizations": {
     "vscode": {
       "extensions": [
