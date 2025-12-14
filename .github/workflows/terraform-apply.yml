@@ -1,0 +1,103 @@
+name: Terraform Apply
+
+on:
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: 'Environment to deploy'
+        required: true
+        type: choice
+        options:
+          - site-primary
+          - site-secondary
+      auto-approve:
+        description: 'Auto-approve the apply (use with caution)'
+        required: false
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+  id-token: write
+  attestations: write
+
+env:
+  TF_IN_AUTOMATION: "true"
+  TF_INPUT: "false"
+
+jobs:
+  terraform-apply:
+    name: Apply - ${{ inputs.environment }}
+    runs-on: self-hosted
+    environment: ${{ inputs.environment }}
+    defaults:
+      run:
+        working-directory: environments/${{ inputs.environment }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: "~> 1.6"
+          terraform_wrapper: false
+
+      - name: Terraform Init
+        id: init
+        run: terraform init
+
+      - name: Terraform Plan
+        id: plan
+        run: |
+          terraform plan -out=tfplan.binary
+          terraform show -json tfplan.binary > tfplan.json
+          terraform show -no-color tfplan.binary > tfplan.txt
+
+      - name: Attest Terraform Plan
+        uses: actions/attest-build-provenance@v1
+        with:
+          subject-path: |
+            environments/${{ inputs.environment }}/tfplan.binary
+            environments/${{ inputs.environment }}/tfplan.json
+
+      - name: Manual Approval Gate
+        if: ${{ !inputs.auto-approve }}
+        uses: trstringer/manual-approval@v1
+        with:
+          secret: ${{ github.TOKEN }}
+          approvers: ${{ github.actor }}
+          minimum-approvals: 1
+          issue-title: "Terraform Apply Approval - ${{ inputs.environment }}"
+          issue-body: |
+            Please review the Terraform plan and approve the apply for **${{ inputs.environment }}**.
+
+            **Plan Summary:**
+            Check the workflow logs for the full plan output.
+
+            **To approve:** Comment `approve` on this issue
+            **To deny:** Comment `deny` on this issue
+
+      - name: Terraform Apply
+        id: apply
+        run: terraform apply -auto-approve tfplan.binary
+
+      - name: Generate Apply Summary
+        if: always()
+        run: |
+          echo "## Terraform Apply Summary - ${{ inputs.environment }}" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Status:** ${{ steps.apply.outcome }}" >> $GITHUB_STEP_SUMMARY
+          echo "**Triggered by:** @${{ github.actor }}" >> $GITHUB_STEP_SUMMARY
+          echo "**Workflow:** ${{ github.workflow }}" >> $GITHUB_STEP_SUMMARY
+
+      - name: Upload Apply Artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: terraform-apply-${{ inputs.environment }}-${{ github.run_number }}
+          path: |
+            environments/${{ inputs.environment }}/tfplan.binary
+            environments/${{ inputs.environment }}/tfplan.json
+            environments/${{ inputs.environment }}/tfplan.txt
+          retention-days: 90
