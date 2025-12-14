@@ -1,0 +1,205 @@
+name: Terraform Plan
+
+on:
+  pull_request:
+    branches:
+      - main
+    paths:
+      - 'terraform/**'
+      - 'environments/**'
+      - '.github/workflows/terraform-plan.yml'
+
+permissions:
+  contents: read
+  pull-requests: write
+  id-token: write
+  attestations: write
+
+env:
+  TF_IN_AUTOMATION: "true"
+  TF_INPUT: "false"
+
+jobs:
+  detect-changes:
+    name: Detect Changed Environments
+    runs-on: ubuntu-latest
+    outputs:
+      matrix: ${{ steps.set-matrix.outputs.matrix }}
+      has-changes: ${{ steps.set-matrix.outputs.has-changes }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Get changed files
+        id: changed-files
+        uses: tj-actions/changed-files@v41
+        with:
+          files: |
+            environments/**/*.tf
+            terraform/modules/**/*.tf
+          json: true
+
+      - name: Set matrix for changed environments
+        id: set-matrix
+        run: |
+          echo "Changed files: ${{ steps.changed-files.outputs.all_changed_files }}"
+
+          # Extract unique environment directories
+          environments=$(echo '${{ steps.changed-files.outputs.all_changed_files }}' | jq -r '.[]' | grep "environments/" | cut -d'/' -f2 | sort -u | jq -R -s -c 'split("\n") | map(select(length > 0))')
+
+          # If no environment changes, check if module changes should trigger all environments
+          if [ "$environments" == "[]" ] || [ -z "$environments" ]; then
+            module_changes=$(echo '${{ steps.changed-files.outputs.all_changed_files }}' | jq -r '.[]' | grep "terraform/modules/" || echo "")
+            if [ -n "$module_changes" ]; then
+              # If modules changed, run against all environments
+              environments=$(find environments -maxdepth 1 -type d ! -path environments | sed 's|environments/||' | jq -R -s -c 'split("\n") | map(select(length > 0))')
+            fi
+          fi
+
+          echo "Detected environments: $environments"
+          echo "matrix=$environments" >> $GITHUB_OUTPUT
+
+          if [ "$environments" != "[]" ] && [ -n "$environments" ]; then
+            echo "has-changes=true" >> $GITHUB_OUTPUT
+          else
+            echo "has-changes=false" >> $GITHUB_OUTPUT
+          fi
+
+  terraform-plan:
+    name: Plan - ${{ matrix.environment }}
+    runs-on: self-hosted
+    needs: detect-changes
+    if: needs.detect-changes.outputs.has-changes == 'true'
+    strategy:
+      fail-fast: false
+      matrix:
+        environment: ${{ fromJson(needs.detect-changes.outputs.matrix) }}
+    defaults:
+      run:
+        working-directory: environments/${{ matrix.environment }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: "~> 1.6"
+          terraform_wrapper: false
+
+      - name: Terraform Format Check
+        id: fmt
+        run: terraform fmt -check -recursive
+        continue-on-error: true
+
+      - name: Terraform Init
+        id: init
+        run: terraform init
+
+      - name: Terraform Validate
+        id: validate
+        run: terraform validate
+
+      - name: Terraform Plan
+        id: plan
+        run: |
+          terraform plan -out=tfplan-${{ matrix.environment }}.binary
+          terraform show -json tfplan-${{ matrix.environment }}.binary > tfplan-${{ matrix.environment }}.json
+        continue-on-error: true
+
+      - name: Generate Plan Summary
+        id: plan-summary
+        run: |
+          terraform show -no-color tfplan-${{ matrix.environment }}.binary > tfplan-${{ matrix.environment }}.txt
+          echo "plan-file=tfplan-${{ matrix.environment }}.txt" >> $GITHUB_OUTPUT
+
+      - name: Attest Terraform Plan
+        uses: actions/attest-build-provenance@v1
+        with:
+          subject-path: |
+            environments/${{ matrix.environment }}/tfplan-${{ matrix.environment }}.binary
+            environments/${{ matrix.environment }}/tfplan-${{ matrix.environment }}.json
+
+      - name: Upload Plan Artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: tfplan-${{ matrix.environment }}
+          path: |
+            environments/${{ matrix.environment }}/tfplan-${{ matrix.environment }}.binary
+            environments/${{ matrix.environment }}/tfplan-${{ matrix.environment }}.json
+            environments/${{ matrix.environment }}/tfplan-${{ matrix.environment }}.txt
+          retention-days: 30
+
+      - name: Comment PR with Plan
+        uses: actions/github-script@v7
+        if: github.event_name == 'pull_request'
+        env:
+          PLAN_OUTPUT: ${{ steps.plan-summary.outputs.plan-file }}
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const fs = require('fs');
+            const planFile = process.env.PLAN_OUTPUT;
+            const environment = '${{ matrix.environment }}';
+
+            let planOutput = 'Plan file not found';
+            try {
+              planOutput = fs.readFileSync(`environments/${environment}/${planFile}`, 'utf8');
+            } catch (error) {
+              console.error('Error reading plan file:', error);
+            }
+
+            // Truncate if too long
+            const maxLength = 65000;
+            if (planOutput.length > maxLength) {
+              planOutput = planOutput.substring(0, maxLength) + '\n\n... (truncated)';
+            }
+
+            const output = `### Terraform Plan Result - \`${environment}\`
+
+            #### Terraform Format and Style 🖌\`${{ steps.fmt.outcome }}\`
+            #### Terraform Initialization ⚙️\`${{ steps.init.outcome }}\`
+            #### Terraform Validation 🤖\`${{ steps.validate.outcome }}\`
+            #### Terraform Plan 📖\`${{ steps.plan.outcome }}\`
+
+            <details><summary>Show Plan</summary>
+
+            \`\`\`terraform
+            ${planOutput}
+            \`\`\`
+
+            </details>
+
+            **Plan artifact**: \`tfplan-${environment}\`
+            **Attestation**: Build provenance attestation generated for this plan
+
+            *Pusher: @${{ github.actor }}, Action: \`${{ github.event_name }}\`, Workflow: \`${{ github.workflow }}\`*`;
+
+            github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: output
+            });
+
+  plan-status:
+    name: Plan Status Check
+    runs-on: ubuntu-latest
+    needs: [detect-changes, terraform-plan]
+    if: always()
+    steps:
+      - name: Check plan results
+        run: |
+          if [[ "${{ needs.detect-changes.outputs.has-changes }}" == "false" ]]; then
+            echo "No Terraform changes detected"
+            exit 0
+          fi
+
+          if [[ "${{ needs.terraform-plan.result }}" == "failure" ]]; then
+            echo "Terraform plan failed"
+            exit 1
+          fi
+
+          echo "Terraform plan succeeded"

@@ -1,0 +1,13 @@
+# Primary Site - Example Configuration
+
+# Copy this file to terraform.tfvars and fill in your actual values
+# DO NOT commit terraform.tfvars to version control
+
+unifi_api_url = "https://unifi.example.com:8443"
+unifi_username = "admin"
+unifi_password = "your-password-here"
+
+site_name = "primary"
+
+wifi_password       = "your-wifi-password-here"
+guest_wifi_password = "your-guest-wifi-password-here"
