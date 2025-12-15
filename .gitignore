@@ -38,3 +38,15 @@ terraform.rc
 
 # Ignore artifacts directory (local development only)
 artifacts/
+
+# Environment files (contain secrets and tokens)
+.env
+.env.local
+.env.*.local
+
+# Python cache and compiled files
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
