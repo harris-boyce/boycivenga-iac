@@ -8,6 +8,10 @@
 
 set -e
 
+# Version configuration
+TERRAFORM_VERSION="1.7.5"
+DOCKER_COMPOSE_VERSION="v2.24.7"
+
 # Colors for output
 RED='\033[0;31m'
 GREEN='\033[0;32m'
@@ -48,7 +52,6 @@ install_terraform() {
     fi
 
     echo "Installing Terraform..."
-    TERRAFORM_VERSION="1.7.5"
 
     if [[ "$OS" == "linux" ]]; then
         curl -fsSL "https://releases.hashicorp.com/terraform/${TERRAFORM_VERSION}/terraform_${TERRAFORM_VERSION}_linux_amd64.zip" -o /tmp/terraform.zip
@@ -60,7 +63,13 @@ install_terraform() {
             brew install terraform
         else
             echo -e "${YELLOW}Homebrew not found. Installing Terraform manually...${NC}"
-            curl -fsSL "https://releases.hashicorp.com/terraform/${TERRAFORM_VERSION}/terraform_${TERRAFORM_VERSION}_darwin_amd64.zip" -o /tmp/terraform.zip
+            ARCH=$(uname -m)
+            if [[ "$ARCH" == "arm64" ]]; then
+                TERRAFORM_ARCH="darwin_arm64"
+            else
+                TERRAFORM_ARCH="darwin_amd64"
+            fi
+            curl -fsSL "https://releases.hashicorp.com/terraform/${TERRAFORM_VERSION}/terraform_${TERRAFORM_VERSION}_${TERRAFORM_ARCH}.zip" -o /tmp/terraform.zip
             unzip -o /tmp/terraform.zip -d /tmp
             sudo mv /tmp/terraform /usr/local/bin/
             rm /tmp/terraform.zip
@@ -128,7 +137,6 @@ install_docker_compose() {
 
     echo "Installing Docker Compose..."
     if [[ "$OS" == "linux" ]]; then
-        DOCKER_COMPOSE_VERSION="v2.24.7"
         sudo curl -L "https://github.com/docker/compose/releases/download/${DOCKER_COMPOSE_VERSION}/docker-compose-$(uname -s)-$(uname -m)" -o /usr/local/bin/docker-compose
         sudo chmod +x /usr/local/bin/docker-compose
         echo -e "${GREEN}Docker Compose installed: $(docker-compose --version)${NC}"
