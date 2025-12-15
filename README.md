@@ -11,6 +11,17 @@ This repository is organized into the following top-level directories:
 - **`scripts/`** – Utility scripts for bootstrap, maintenance, and development workflows
 - **`docs/`** – Project documentation, architecture decisions, and operational guides
 
+## Quick Start
+
+### For Contributors
+
+If you're contributing to this repository, please see [CONTRIBUTING.md](CONTRIBUTING.md) for detailed setup instructions and development guidelines.
+
+**Quick setup:**
+1. Use the devcontainer (recommended) - all tools are pre-installed, or
+2. Run `bash scripts/bootstrap.sh` for manual setup
+3. Run `pre-commit install` to enable code quality checks
+
 ## Development Environment
 
 This repository includes a development container (devcontainer) configuration that provides a consistent, reproducible development environment for all contributors. The devcontainer comes pre-configured with all necessary tools for working with Terraform, Python, and networking workflows.
