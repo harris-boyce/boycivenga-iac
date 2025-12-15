@@ -1,6 +1,16 @@
 # boycivenga-iac
 Terraform repository for managing all things home networking, lab, smart home automations, etc.
 
+## Repository Layout
+
+This repository is organized into the following top-level directories:
+
+- **`netbox-client/`** – Tools and scripts for interacting with the NetBox API and managing network intent data
+- **`terraform/`** – Terraform modules and configurations for infrastructure as code
+- **`artifacts/`** – Rendered outputs and generated files (used for local development, not version controlled)
+- **`scripts/`** – Utility scripts for bootstrap, maintenance, and development workflows
+- **`docs/`** – Project documentation, architecture decisions, and operational guides
+
 ## Development Environment
 
 This repository includes a development container (devcontainer) configuration that provides a consistent, reproducible development environment for all contributors. The devcontainer comes pre-configured with all necessary tools for working with Terraform, Python, and networking workflows.
