@@ -11,6 +11,8 @@ from nb_config import NETBOX_URL, TOKEN
 if __name__ == "__main__":
     print("NetBox Configuration:")
     print(f"  URL: {NETBOX_URL}")
-    print(f"  Token: {'*' * 10}{TOKEN[-4:]}")  # Show only last 4 chars
+    # Safely mask token, showing only last 4 chars if available
+    masked_token = "*" * 10 + (TOKEN[-4:] if len(TOKEN) >= 4 else TOKEN)
+    print(f"  Token: {masked_token}")
     print("\nConfiguration loaded successfully!")
     print("You can now use NETBOX_URL and TOKEN to make API requests.")
