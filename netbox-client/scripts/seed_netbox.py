@@ -7,20 +7,24 @@ a local NetBox instance for testing and development.
 
 Usage:
     # Seed a specific site
-    python netbox-client/scripts/seed_netbox.py netbox-client/examples/site-pennington.yaml
+    python netbox-client/scripts/seed_netbox.py \\
+        netbox-client/examples/site-pennington.yaml
 
     # Seed multiple sites
-    python netbox-client/scripts/seed_netbox.py netbox-client/examples/*.yaml
+    python netbox-client/scripts/seed_netbox.py \\
+        netbox-client/examples/*.yaml
 
 Environment Variables:
-    NETBOX_URL: NetBox API endpoint URL (default: http://localhost:8000/api/)
+    NETBOX_URL: NetBox API endpoint URL
+        (default: http://localhost:8000/api/)
     NETBOX_API_TOKEN: NetBox API authentication token (required)
 """
 
 import argparse
-import os
+import re
 import sys
 from pathlib import Path
+from urllib.parse import urlparse
 
 import requests
 import yaml
@@ -29,7 +33,7 @@ import yaml
 SCRIPT_DIR = Path(__file__).parent
 sys.path.insert(0, str(SCRIPT_DIR))
 
-from nb_config import NETBOX_URL, TOKEN
+from nb_config import NETBOX_URL, TOKEN  # noqa: E402
 
 # API headers for authentication
 HEADERS = {"Authorization": f"Token {TOKEN}", "Content-Type": "application/json"}
@@ -50,9 +54,13 @@ def seed_site(data, site_name):
         print(f"⚠️  No site configuration found in {site_name}")
         return None
 
+    # Generate slug: convert to lowercase, replace non-alphanumeric
+    # with hyphens, strip leading/trailing hyphens
+    default_slug = re.sub(r"[^a-z0-9]+", "-", site_config["name"].lower()).strip("-")
+
     site_payload = {
         "name": site_config["name"],
-        "slug": site_config.get("slug", site_config["name"].lower().replace(" ", "-")),
+        "slug": site_config.get("slug", default_slug),
     }
 
     if "description" in site_config:
@@ -71,7 +79,9 @@ def seed_site(data, site_name):
             return site
 
         # Create new site
-        response = requests.post(f"{NETBOX_URL}dcim/sites/", json=site_payload, headers=HEADERS)
+        response = requests.post(
+            f"{NETBOX_URL}dcim/sites/", json=site_payload, headers=HEADERS
+        )
         response.raise_for_status()
         site = response.json()
         print(f"✅ Created site '{site_config['name']}' (ID: {site['id']})")
@@ -125,19 +135,24 @@ def seed_vlans(data, site_name, site_obj):
 
             if response.json()["count"] > 0:
                 vlan = response.json()["results"][0]
+                vlan_id = vlan_config["vlan_id"]
+                vlan_name = vlan_config["name"]
                 print(
-                    f"✅ VLAN {vlan_config['vlan_id']} ('{vlan_config['name']}') already exists (ID: {vlan['id']})"
+                    f"✅ VLAN {vlan_id} ('{vlan_name}') "
+                    f"already exists (ID: {vlan['id']})"
                 )
                 created_vlans.append(vlan)
                 continue
 
             # Create new VLAN
-            response = requests.post(f"{NETBOX_URL}ipam/vlans/", json=vlan_payload, headers=HEADERS)
+            response = requests.post(
+                f"{NETBOX_URL}ipam/vlans/", json=vlan_payload, headers=HEADERS
+            )
             response.raise_for_status()
             vlan = response.json()
-            print(
-                f"✅ Created VLAN {vlan_config['vlan_id']} ('{vlan_config['name']}') (ID: {vlan['id']})"
-            )
+            vlan_id = vlan_config["vlan_id"]
+            vlan_name = vlan_config["name"]
+            print(f"✅ Created VLAN {vlan_id} ('{vlan_name}') " f"(ID: {vlan['id']})")
             created_vlans.append(vlan)
 
         except requests.exceptions.RequestException as e:
@@ -194,19 +209,23 @@ def seed_prefixes(data, site_name, site_obj, vlans):
 
             if response.json()["count"] > 0:
                 prefix = response.json()["results"][0]
+                prefix_addr = prefix_config["prefix"]
                 print(
-                    f"✅ Prefix {prefix_config['prefix']} already exists (ID: {prefix['id']})"
+                    f"✅ Prefix {prefix_addr} already exists " f"(ID: {prefix['id']})"
                 )
                 created_prefixes.append(prefix)
                 continue
 
             # Create new prefix
             response = requests.post(
-                f"{NETBOX_URL}ipam/prefixes/", json=prefix_payload, headers=HEADERS
+                f"{NETBOX_URL}ipam/prefixes/",
+                json=prefix_payload,
+                headers=HEADERS,
             )
             response.raise_for_status()
             prefix = response.json()
-            print(f"✅ Created prefix {prefix_config['prefix']} (ID: {prefix['id']})")
+            prefix_addr = prefix_config["prefix"]
+            print(f"✅ Created prefix {prefix_addr} " f"(ID: {prefix['id']})")
             created_prefixes.append(prefix)
 
         except requests.exceptions.RequestException as e:
@@ -228,7 +247,7 @@ def seed_from_file(file_path):
     """
     print(f"\n{'=' * 60}")
     print(f"Processing: {file_path}")
-    print(f"{'=' * 60}")
+    print("=" * 60)
 
     try:
         with open(file_path, "r") as f:
@@ -241,16 +260,17 @@ def seed_from_file(file_path):
         # Seed in order: site -> vlans -> prefixes
         site = seed_site(data, file_path)
         if not site:
-            print(f"⚠️  Skipping VLANs and prefixes due to site creation failure")
+            print("⚠️  Skipping VLANs and prefixes " "due to site creation failure")
             return False
 
         vlans = seed_vlans(data, file_path, site)
         prefixes = seed_prefixes(data, file_path, site, vlans)
 
         print(f"\n✅ Successfully processed {file_path}")
-        print(
-            f"   Summary: Site={site['name']}, VLANs={len(vlans)}, Prefixes={len(prefixes)}"
+        site_summary = (
+            f"Site={site['name']}, " f"VLANs={len(vlans)}, " f"Prefixes={len(prefixes)}"
         )
+        print(f"   Summary: {site_summary}")
         return True
 
     except FileNotFoundError:
@@ -294,10 +314,14 @@ Environment Variables:
 
     args = parser.parse_args()
 
+    # Sanitize URL for display (remove any potential credentials)
+    parsed_url = urlparse(NETBOX_URL)
+    safe_url = f"{parsed_url.scheme}://{parsed_url.netloc}{parsed_url.path}"
+
     print("=" * 60)
     print("NetBox Seeding Script")
     print("=" * 60)
-    print(f"NetBox URL: {NETBOX_URL}")
+    print(f"NetBox URL: {safe_url}")
     print(f"Files to process: {len(args.files)}")
     print("=" * 60)
 
