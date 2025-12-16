@@ -52,7 +52,7 @@ services:
       DB_PASSWORD: netbox
       DB_PORT: 5432
       DB_WAIT_TIMEOUT: 60
-      
+
       # Redis configuration
       REDIS_HOST: redis
       REDIS_PORT: 6379
@@ -60,7 +60,7 @@ services:
       REDIS_CACHE_HOST: redis
       REDIS_CACHE_PORT: 6379
       REDIS_CACHE_DATABASE: 1
-      
+
       # NetBox configuration
       # Fixed SECRET_KEY for local dev - ensures sessions persist across container restarts
       # For production: Generate with `openssl rand -base64 50` and store securely
@@ -71,7 +71,7 @@ services:
       # Fixed API token for easy local development/testing
       # For production: Generate random 40-char hex token and store securely
       SUPERUSER_API_TOKEN: 0123456789abcdef0123456789abcdef01234567
-      
+
       # Allow connections from any host (for local dev only)
       ALLOWED_HOSTS: "*"
     volumes:

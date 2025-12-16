@@ -80,6 +80,63 @@ docker compose up -d
 
 **Note:** This will delete all data including devices, sites, and custom configurations.
 
+#### Seeding NetBox with Example Data
+
+After starting or resetting your local NetBox instance, you can populate it with example data for the multi-site home lab using the seeding script.
+
+**Prerequisites:**
+- NetBox instance running (local or remote)
+- Python 3.x installed
+- Required Python packages: `requests`, `pyyaml`
+
+```bash
+# Install required Python packages
+pip install requests pyyaml
+
+# Set environment variables
+export NETBOX_URL="http://localhost:8000/api/"
+export NETBOX_API_TOKEN="0123456789abcdef0123456789abcdef01234567"
+
+# Seed a specific site
+python netbox-client/scripts/seed_netbox.py netbox-client/examples/site-pennington.yaml
+
+# Seed all example sites
+python netbox-client/scripts/seed_netbox.py netbox-client/examples/*.yaml
+```
+
+**Example Sites:**
+- `site-pennington` - Primary residence with 192.168.10.0/24 network
+- `site-countfleetcourt` - Secondary site with 192.168.20.0/24 network
+
+**What gets created:**
+- Sites with descriptions
+- VLANs for each site
+- IP prefixes associated with VLANs
+
+**Resetting and Reseeding:**
+
+To completely reset and reseed your local NetBox:
+
+```bash
+# Navigate to netbox-client directory
+cd netbox-client
+
+# Reset NetBox (removes all data)
+docker compose down -v
+docker compose up -d
+
+# Wait for NetBox to be ready (1-2 minutes)
+docker compose logs -f netbox
+
+# Once ready, seed with example data
+cd ..
+export NETBOX_URL="http://localhost:8000/api/"
+export NETBOX_API_TOKEN="0123456789abcdef0123456789abcdef01234567"
+python netbox-client/scripts/seed_netbox.py netbox-client/examples/*.yaml
+```
+
+**Note:** The seeding script is idempotent - it checks if resources already exist before creating them, so it's safe to run multiple times.
+
 #### Checking Status
 
 ```bash
@@ -256,6 +313,65 @@ export NETBOX_API_TOKEN="prod-token-here"
 - Use `.env` files for each environment (`.env.local`, `.env.staging`, `.env.prod`)
 - Load the appropriate file before running scripts: `source .env.staging`
 - Never commit `.env` files with real credentials to version control
+
+## Example Data Files
+
+The `examples/` directory contains YAML files with example NetBox configurations for multi-site home lab setups. These files can be used with the `seed_netbox.py` script to populate a NetBox instance.
+
+### Available Examples
+
+#### `examples/site-pennington.yaml`
+Primary residence configuration:
+- Site: site-pennington
+- Network: 192.168.10.0/24
+- VLAN: 10 (Home VLAN)
+
+#### `examples/site-countfleetcourt.yaml`
+Secondary site configuration:
+- Site: site-countfleetcourt
+- Network: 192.168.20.0/24
+- VLAN: 20 (Secondary VLAN)
+
+### YAML File Format
+
+Each example file follows this structure:
+
+```yaml
+site:
+  name: site-name
+  slug: site-slug
+  description: Site description
+
+prefixes:
+  - prefix: 192.168.10.0/24
+    vlan: 10
+    description: Network description
+    status: active
+
+vlans:
+  - vlan_id: 10
+    name: VLAN name
+    description: VLAN description
+    status: active
+```
+
+### Creating Custom Examples
+
+You can create your own YAML files following the same format:
+
+1. Copy an existing example file
+2. Modify the site name, networks, and VLANs
+3. Save with a descriptive filename (e.g., `site-mylocation.yaml`)
+4. Run the seeding script with your new file
+
+### Extensibility
+
+These examples can be extended to include additional NetBox objects in the future:
+- Devices and device types
+- Rack layouts
+- IP addresses
+- Interfaces and connections
+- Circuits and providers
 
 ## Usage Example
 

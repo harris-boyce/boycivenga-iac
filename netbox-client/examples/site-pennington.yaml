@@ -1,0 +1,21 @@
+# NetBox Example Data - Site Pennington
+# This file contains example configuration for the primary residence site
+
+site:
+  name: site-pennington
+  slug: site-pennington
+  description: Primary residence
+
+# IP prefixes for the site
+prefixes:
+  - prefix: 192.168.10.0/24
+    vlan: 10
+    description: LAN
+    status: active
+
+# VLANs for the site
+vlans:
+  - vlan_id: 10
+    name: Home VLAN
+    description: Main LAN
+    status: active
