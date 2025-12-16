@@ -34,6 +34,8 @@ services:
 
   # NetBox application
   netbox:
+    # Using 'latest' tag for local dev to always get newest features/fixes
+    # For production or stability, pin to specific version: netboxcommunity/netbox:v3.7
     image: netboxcommunity/netbox:latest
     container_name: netbox
     restart: unless-stopped
@@ -60,10 +62,14 @@ services:
       REDIS_CACHE_DATABASE: 1
       
       # NetBox configuration
-      SECRET_KEY: "r8OwDznj!!dci#P9ghmRfdu1Ysxm0AiPeDCQhKE+N_rClfWNj!"  # Change in production!
+      # Fixed SECRET_KEY for local dev - ensures sessions persist across container restarts
+      # For production: Generate with `openssl rand -base64 50` and store securely
+      SECRET_KEY: "r8OwDznj!!dci#P9ghmRfdu1Ysxm0AiPeDCQhKE+N_rClfWNj!"
       SUPERUSER_NAME: admin
       SUPERUSER_EMAIL: admin@localhost
       SUPERUSER_PASSWORD: admin
+      # Fixed API token for easy local development/testing
+      # For production: Generate random 40-char hex token and store securely
       SUPERUSER_API_TOKEN: 0123456789abcdef0123456789abcdef01234567
       
       # Allow connections from any host (for local dev only)
