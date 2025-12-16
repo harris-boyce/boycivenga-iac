@@ -6,12 +6,129 @@ Tools and scripts for interacting with the NetBox API and managing network inten
 
 - `scripts/` – Python scripts and utilities for NetBox operations
 - `examples/` – Example configurations and usage patterns
+- `docker-compose.yml` – Local NetBox instance for development/testing (⚠️ NOT FOR PRODUCTION)
+
+## Local NetBox Development Environment
+
+### ⚠️ WARNING: FOR LOCAL DEVELOPMENT/TESTING ONLY - DO NOT USE IN PRODUCTION
+
+This directory includes a Docker Compose configuration that provides a minimal NetBox instance for local development and testing. **This setup is NOT suitable for production use.**
+
+For production environments:
+- Use a properly configured, hardened NetBox instance managed by your infrastructure team
+- Follow [NetBox's official production deployment guide](https://docs.netbox.dev/en/stable/installation/)
+- Implement proper security controls, backups, monitoring, and high availability
+- Use environment-specific configuration and secrets management
+
+### Quick Start - Local NetBox
+
+#### Prerequisites
+
+- Docker and Docker Compose installed on your system
+- Ports 8000 available on localhost
+
+#### Starting NetBox
+
+```bash
+# Navigate to the netbox-client directory
+cd netbox-client
+
+# Start NetBox and all required services
+docker compose up -d
+
+# Wait for services to be ready (first startup takes 1-2 minutes)
+docker compose logs -f netbox
+
+# Once you see "NetBox started" or similar, NetBox is ready at:
+# http://localhost:8000
+```
+
+#### Default Credentials
+
+**Web UI Login:**
+- URL: http://localhost:8000
+- Username: `admin`
+- Password: `admin`
+
+**API Access:**
+- URL: http://localhost:8000/api/
+- Default Token: `0123456789abcdef0123456789abcdef01234567`
+
+**⚠️ Security Note:** These are default development credentials. Never use these in production!
+
+#### Stopping NetBox
+
+```bash
+# Stop services (preserves data)
+docker compose stop
+
+# Stop and remove containers (preserves data volumes)
+docker compose down
+```
+
+#### Resetting NetBox Data
+
+To completely reset your local NetBox instance and start fresh:
+
+```bash
+# Stop and remove containers and volumes
+docker compose down -v
+
+# Start fresh
+docker compose up -d
+```
+
+**Note:** This will delete all data including devices, sites, and custom configurations.
+
+#### Checking Status
+
+```bash
+# View logs for all services
+docker compose logs -f
+
+# View logs for specific service
+docker compose logs -f netbox
+
+# Check service health
+docker compose ps
+```
+
+#### Accessing the NetBox Shell
+
+```bash
+# Access NetBox management shell
+docker compose exec netbox python /opt/netbox/netbox/manage.py shell
+
+# Run management commands
+docker compose exec netbox python /opt/netbox/netbox/manage.py <command>
+```
+
+### Using Local NetBox with Scripts
+
+When running scripts against your local NetBox instance:
+
+```bash
+# Set environment variables
+export NETBOX_URL="http://localhost:8000/api/"
+export NETBOX_API_TOKEN="0123456789abcdef0123456789abcdef01234567"
+
+# Or create a .env file (recommended)
+cat > .env << EOF
+NETBOX_URL=http://localhost:8000/api/
+NETBOX_API_TOKEN=0123456789abcdef0123456789abcdef01234567
+EOF
+
+# Run your scripts
+python scripts/example_usage.py
+```
 
 ## Configuration
 
 ### NetBox API Access
 
-Scripts in this directory connect to NetBox using environment-based configuration. This allows seamless switching between local development and remote NetBox instances.
+Scripts in this directory connect to NetBox using environment-based configuration. This allows seamless switching between local development and remote/production NetBox instances.
+
+**Important:** The local Docker Compose setup is ONLY for development and testing. For CI/CD pipelines and production workflows, always use a properly managed NetBox instance.
 
 #### Required Environment Variables
 
@@ -22,8 +139,32 @@ Scripts in this directory connect to NetBox using environment-based configuratio
 
 #### Local Development Setup
 
+**Using Local Docker Compose NetBox (for development/testing only):**
+
+1. **Start Local NetBox:**
+   ```bash
+   cd netbox-client
+   docker compose up -d
+   ```
+
+2. **Configure Environment Variables:**
+   ```bash
+   # Use the default development token
+   export NETBOX_URL="http://localhost:8000/api/"
+   export NETBOX_API_TOKEN="0123456789abcdef0123456789abcdef01234567"
+   ```
+
+3. **Verify Configuration:**
+   ```bash
+   # Test API connectivity
+   curl -H "Authorization: Token 0123456789abcdef0123456789abcdef01234567" \
+        http://localhost:8000/api/
+   ```
+
+**Using Remote/Production NetBox:**
+
 1. **Generate a NetBox API Token:**
-   - Access your NetBox instance (local or remote)
+   - Access your NetBox instance (production/staging)
    - Navigate to: Admin → Users → API Tokens
    - Create a new token with appropriate permissions
    - Copy the token value
@@ -36,17 +177,14 @@ Scripts in this directory connect to NetBox using environment-based configuratio
    cp .env.example .env
 
    # Edit .env and set your token
+   # NETBOX_URL=https://netbox.example.com/api/
    # NETBOX_API_TOKEN=your-actual-token-here
    ```
 
    **Option B: Export in your shell**
    ```bash
-   # For local NetBox instance
-   export NETBOX_API_TOKEN="your-token-here"
-   export NETBOX_URL="http://localhost:8000/api/"
-
-   # For remote NetBox instance
-   export NETBOX_API_TOKEN="your-token-here"
+   # For production NetBox instance
+   export NETBOX_API_TOKEN="your-production-token-here"
    export NETBOX_URL="https://netbox.example.com/api/"
    ```
 
@@ -59,13 +197,15 @@ Scripts in this directory connect to NetBox using environment-based configuratio
 
 #### GitHub Actions / CI Setup
 
+**⚠️ IMPORTANT:** Always use a dedicated, properly managed NetBox instance for CI/CD pipelines. Never use the local Docker Compose NetBox for automated workflows or production.
+
 For CI/CD pipelines, configure NetBox credentials as repository secrets:
 
 1. **Add Repository Secrets:**
    - Go to: Repository Settings → Secrets and variables → Actions
    - Add the following secrets:
-     - `NETBOX_API_TOKEN`: Your NetBox API token
-     - `NETBOX_URL`: Your NetBox API endpoint (if not using default)
+     - `NETBOX_API_TOKEN`: Your production/staging NetBox API token
+     - `NETBOX_URL`: Your NetBox API endpoint (e.g., `https://netbox.example.com/api/`)
 
 2. **Use in Workflows:**
    ```yaml
@@ -76,6 +216,12 @@ For CI/CD pipelines, configure NetBox credentials as repository secrets:
      run: |
        python netbox-client/scripts/your_script.py
    ```
+
+**Why not use local NetBox in CI?**
+- CI/CD should use the authoritative source of truth (production NetBox)
+- Local Docker NetBox has no real data and default credentials
+- Production workflows should integrate with production systems
+- Spinning up NetBox in CI is slow and unnecessary
 
 #### Security Best Practices
 
@@ -88,10 +234,10 @@ For CI/CD pipelines, configure NetBox credentials as repository secrets:
 
 #### Switching Between Environments
 
-**Local Development:**
+**Local Development (Docker Compose):**
 ```bash
 export NETBOX_URL="http://localhost:8000/api/"
-export NETBOX_API_TOKEN="dev-token-here"
+export NETBOX_API_TOKEN="0123456789abcdef0123456789abcdef01234567"
 ```
 
 **Staging Environment:**
@@ -105,6 +251,11 @@ export NETBOX_API_TOKEN="staging-token-here"
 export NETBOX_URL="https://netbox.example.com/api/"
 export NETBOX_API_TOKEN="prod-token-here"
 ```
+
+**Tips:**
+- Use `.env` files for each environment (`.env.local`, `.env.staging`, `.env.prod`)
+- Load the appropriate file before running scripts: `source .env.staging`
+- Never commit `.env` files with real credentials to version control
 
 ## Usage Example
 
@@ -134,13 +285,62 @@ if __name__ == "__main__":
 
 ## Troubleshooting
 
+### Local Docker Compose Issues
+
+#### Services won't start or fail health checks
+
+**Cause:** Ports may be in use, or containers may be in a bad state.
+
+**Solution:**
+```bash
+# Check what's using port 8000
+lsof -i :8000
+
+# Stop and remove everything, then restart
+docker compose down
+docker compose up -d
+
+# Check service logs
+docker compose logs
+```
+
+#### "Cannot connect to Docker daemon"
+
+**Cause:** Docker is not running.
+
+**Solution:**
+- Ensure Docker Desktop or Docker daemon is running
+- Check Docker status: `docker ps`
+
+#### NetBox takes too long to start
+
+**Cause:** First startup requires database initialization and migrations.
+
+**Solution:**
+- Wait 1-2 minutes for initial setup
+- Monitor progress: `docker compose logs -f netbox`
+- Look for "NetBox started" or similar success message
+
+#### Need to completely reset
+
+**Solution:**
+```bash
+# Nuclear option - removes all data
+docker compose down -v
+docker volume prune -f
+docker compose up -d
+```
+
 ### "NetBox API token required" Error
 
 **Cause:** The `NETBOX_API_TOKEN` environment variable is not set.
 
 **Solution:**
 ```bash
-# Set the token
+# For local development
+export NETBOX_API_TOKEN="0123456789abcdef0123456789abcdef01234567"
+
+# For remote NetBox, set your actual token
 export NETBOX_API_TOKEN="your-token-here"
 
 # Or create a .env file
@@ -153,9 +353,10 @@ cp .env.example .env
 **Cause:** NetBox instance is not accessible at the configured URL.
 
 **Solutions:**
-- Verify NetBox is running: `curl http://localhost:8000/api/`
-- Check firewall/network settings
-- Verify the URL is correct (including `/api/` suffix)
+- **Local NetBox:** Verify containers are running: `docker compose ps`
+- **Local NetBox:** Check NetBox is healthy: `curl http://localhost:8000/api/`
+- **Remote NetBox:** Verify URL is correct (including `/api/` suffix)
+- **Remote NetBox:** Check firewall/network settings and VPN if required
 
 ### Authentication Errors (401/403)
 
@@ -163,11 +364,71 @@ cp .env.example .env
 
 **Solutions:**
 - Verify token is correct and not expired
-- Check token permissions in NetBox UI
+- Check token permissions in NetBox UI (Admin → API Tokens)
+- For local NetBox, use default token: `0123456789abcdef0123456789abcdef01234567`
 - Generate a new token if needed
 
 ## Additional Resources
 
 - [NetBox API Documentation](https://docs.netbox.dev/en/stable/integrations/rest-api/)
+- [NetBox Docker Repository](https://github.com/netbox-community/netbox-docker)
 - [pynetbox Library](https://github.com/netbox-community/pynetbox) - Python client for NetBox
 - See `docs/netbox-schema.md` for schema documentation and data models
+
+## Extending the Local NetBox Setup
+
+The Docker Compose configuration can be extended for additional testing scenarios:
+
+### Adding NetBox Plugins
+
+Edit `docker-compose.yml` to install plugins:
+
+```yaml
+netbox:
+  environment:
+    # Add plugin configuration
+    PLUGINS: '["netbox_bgp", "netbox_topology_views"]'
+  volumes:
+    # Mount plugin configuration
+    - ./plugins:/etc/netbox/config/plugins
+```
+
+### Pre-loading Test Data
+
+```bash
+# Create a script to populate test data
+docker compose exec netbox python /opt/netbox/netbox/manage.py shell << EOF
+from dcim.models import Site, Device, DeviceType, Manufacturer
+
+# Create test data
+manufacturer = Manufacturer.objects.create(name="Cisco", slug="cisco")
+device_type = DeviceType.objects.create(
+    manufacturer=manufacturer,
+    model="Catalyst 9300",
+    slug="catalyst-9300"
+)
+site = Site.objects.create(name="Lab", slug="lab")
+EOF
+```
+
+### Custom Configuration
+
+Mount a custom NetBox configuration file:
+
+```yaml
+netbox:
+  volumes:
+    - ./custom_configuration.py:/etc/netbox/config/configuration.py:ro
+```
+
+### Backup and Restore
+
+```bash
+# Backup database
+docker compose exec postgres pg_dump -U netbox netbox > netbox_backup.sql
+
+# Restore database
+cat netbox_backup.sql | docker compose exec -T postgres psql -U netbox netbox
+```
+
+**Remember:** These extensions are for local development/testing only. Production NetBox should be managed by infrastructure teams with proper deployment practices.
