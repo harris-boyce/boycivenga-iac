@@ -1,0 +1,86 @@
+---
+# ⚠️  WARNING: FOR LOCAL DEVELOPMENT/TESTING ONLY - DO NOT USE IN PRODUCTION ⚠️
+#
+# This Docker Compose configuration provides a minimal NetBox instance for local
+# development and testing purposes. It is NOT suitable for production use.
+#
+# For production deployments:
+# - Use a properly configured, hardened NetBox instance
+# - Follow NetBox's official production deployment guide
+# - Implement proper security controls, backups, and monitoring
+# - Use this configuration only to understand how to connect to NetBox API
+
+services:
+  # PostgreSQL database for NetBox
+  postgres:
+    image: postgres:15-alpine
+    container_name: netbox-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: netbox
+      POSTGRES_USER: netbox
+      POSTGRES_PASSWORD: netbox
+    volumes:
+      - netbox-postgres-data:/var/lib/postgresql/data
+
+  # Redis cache and task queue
+  redis:
+    image: redis:7-alpine
+    container_name: netbox-redis
+    restart: unless-stopped
+    command: redis-server --appendonly yes
+    volumes:
+      - netbox-redis-data:/data
+
+  # NetBox application
+  netbox:
+    # Using 'latest' tag for local dev to always get newest features/fixes
+    # For production or stability, pin to specific version: netboxcommunity/netbox:v3.7
+    image: netboxcommunity/netbox:latest
+    container_name: netbox
+    restart: unless-stopped
+    depends_on:
+      - postgres
+      - redis
+    ports:
+      - "127.0.0.1:8000:8080"
+    environment:
+      # Database configuration
+      DB_HOST: postgres
+      DB_NAME: netbox
+      DB_USER: netbox
+      DB_PASSWORD: netbox
+      DB_PORT: 5432
+      DB_WAIT_TIMEOUT: 60
+      
+      # Redis configuration
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      REDIS_DATABASE: 0
+      REDIS_CACHE_HOST: redis
+      REDIS_CACHE_PORT: 6379
+      REDIS_CACHE_DATABASE: 1
+      
+      # NetBox configuration
+      # Fixed SECRET_KEY for local dev - ensures sessions persist across container restarts
+      # For production: Generate with `openssl rand -base64 50` and store securely
+      SECRET_KEY: "r8OwDznj!!dci#P9ghmRfdu1Ysxm0AiPeDCQhKE+N_rClfWNj!"
+      SUPERUSER_NAME: admin
+      SUPERUSER_EMAIL: admin@localhost
+      SUPERUSER_PASSWORD: admin
+      # Fixed API token for easy local development/testing
+      # For production: Generate random 40-char hex token and store securely
+      SUPERUSER_API_TOKEN: 0123456789abcdef0123456789abcdef01234567
+      
+      # Allow connections from any host (for local dev only)
+      ALLOWED_HOSTS: "*"
+    volumes:
+      - netbox-media:/opt/netbox/netbox/media
+
+volumes:
+  netbox-postgres-data:
+    name: netbox-postgres-data
+  netbox-redis-data:
+    name: netbox-redis-data
+  netbox-media:
+    name: netbox-media
