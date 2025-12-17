@@ -34,10 +34,7 @@ jobs:
             tf_dirs=$(find . -name "*.tf" -type f -exec dirname {} \; | sort -u)
             for dir in $tf_dirs; do
               echo "Validating Terraform in $dir"
-              cd "$dir"
-              terraform init -backend=false
-              terraform validate
-              cd - > /dev/null
+              (cd "$dir" && terraform init -backend=false && terraform validate)
             done
           else
             echo "No Terraform files found, skipping terraform validate"

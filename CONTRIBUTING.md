@@ -169,7 +169,7 @@ pre-commit run --all-files
 black --check .
 
 # Lint Python code
-flake8 .
+flake8 --max-line-length=88 --extend-ignore=E203,W503 .
 
 # Validate Terraform (if you have .tf files)
 cd terraform
