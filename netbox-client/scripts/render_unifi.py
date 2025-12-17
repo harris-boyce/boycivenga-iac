@@ -33,8 +33,7 @@ Output:
 NetBox to UniFi Field Mapping:
     Sites → UniFi Site:
         - name → site.name
-        - slug → site.desc (description)
-        - description → site.desc
+        - description → site.desc (falls back to name if description is empty)
 
     Prefixes → UniFi Networks:
         - prefix → network.ip_subnet (CIDR notation)
