@@ -137,6 +137,61 @@ python netbox-client/scripts/seed_netbox.py netbox-client/examples/*.yaml
 
 **Note:** The seeding script is idempotent - it checks if resources already exist before creating them, so it's safe to run multiple times.
 
+#### Exporting NetBox Intent Data
+
+The `export_intent.py` script allows you to export NetBox "intent" data (sites, prefixes, VLANs, tags) to JSON and YAML files. This is useful for backup, documentation, or migration purposes.
+
+**Prerequisites:**
+- NetBox instance running (local or remote)
+- Python 3.x installed
+- Required Python packages: `requests`, `pyyaml`
+
+```bash
+# Set environment variables
+export NETBOX_URL="http://localhost:8000/api/"
+export NETBOX_API_TOKEN="0123456789abcdef0123456789abcdef01234567"
+
+# Export all intent data to default location (artifacts/intent-export/)
+python netbox-client/scripts/export_intent.py
+
+# Export to a custom directory
+python netbox-client/scripts/export_intent.py --output-dir /tmp/netbox-export
+
+# Export only specific resource types
+python netbox-client/scripts/export_intent.py --sites --vlans
+```
+
+**What gets exported:**
+- **Sites**: Physical locations and data centers
+- **Prefixes**: IP address ranges and subnets
+- **VLANs**: Virtual LAN configurations
+- **Tags**: Metadata tags for organizing resources
+
+**Output files** (generated in both JSON and YAML formats):
+- `sites.json` / `sites.yaml` - Site configurations
+- `prefixes.json` / `prefixes.yaml` - IP prefix allocations
+- `vlans.json` / `vlans.yaml` - VLAN configurations
+- `tags.json` / `tags.yaml` - Tag definitions
+
+**API Endpoints Used:**
+- `GET /api/dcim/sites/` - List all sites
+- `GET /api/ipam/prefixes/` - List all IP prefixes
+- `GET /api/ipam/vlans/` - List all VLANs
+- `GET /api/extras/tags/` - List all tags
+
+**Example workflow:**
+
+```bash
+# 1. Seed NetBox with example data
+python netbox-client/scripts/seed_netbox.py netbox-client/examples/*.yaml
+
+# 2. Export the data for backup or documentation
+python netbox-client/scripts/export_intent.py
+
+# 3. Review exported files
+ls -lh artifacts/intent-export/
+```
+
 #### Checking Status
 
 ```bash
