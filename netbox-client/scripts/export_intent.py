@@ -345,20 +345,20 @@ Environment Variables:
     print("=" * 60)
     print("Export Complete")
     print("=" * 60)
-    
+
     if exported_resources:
         print(f"✅ Successfully exported: {', '.join(exported_resources)}")
-    
+
     if failed_resources:
         print(f"⚠️  Failed to export (no data or errors): {', '.join(failed_resources)}")
-    
+
     if not exported_resources:
         print("❌ No data was exported")
         sys.exit(1)
-    
+
     print(f"   Output location: {args.output_dir.resolve()}")
     print()
-    
+
     if exported_resources:
         print("Files created:")
         for resource in exported_resources:
