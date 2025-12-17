@@ -213,7 +213,7 @@ jobs:
 
       - name: Add workflow summary
         run: |
-          cat >> $GITHUB_STEP_SUMMARY << 'EOF'
+          cat >> $GITHUB_STEP_SUMMARY << EOF
           # Render Artifacts Workflow Complete ✅
 
           ## Artifacts Generated
