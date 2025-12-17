@@ -208,7 +208,7 @@ def render_site_tfvars(
     tfvars["prefixes"] = [
         {
             "cidr": prefix.get("prefix", ""),
-            "vlan_id": prefix.get("vlan"),
+            "vlan_id": prefix.get("vlan", None),  # Can be None if not associated
             "description": prefix.get("description", ""),
             "status": prefix.get("status", "active"),
         }
@@ -218,7 +218,7 @@ def render_site_tfvars(
     # Map VLANs
     tfvars["vlans"] = [
         {
-            "vlan_id": vlan.get("vlan_id"),
+            "vlan_id": vlan.get("vlan_id", None),  # Should not be None
             "name": vlan.get("name", ""),
             "description": vlan.get("description", ""),
             "status": vlan.get("status", "active"),

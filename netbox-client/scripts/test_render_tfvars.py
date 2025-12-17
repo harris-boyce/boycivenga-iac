@@ -11,6 +11,9 @@ import tempfile
 from pathlib import Path
 
 # Add parent directory to path for imports
+# This allows importing render_tfvars module for testing without
+# requiring a package structure. This is acceptable for simple test scripts
+# in the same directory as the module being tested.
 sys.path.insert(0, str(Path(__file__).parent))
 
 import render_tfvars  # noqa: E402
