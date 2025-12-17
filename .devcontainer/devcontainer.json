@@ -18,7 +18,8 @@
         "ms-python.python",
         "hashicorp.terraform",
         "redhat.vscode-yaml",
-        "yzhang.markdown-all-in-one"
+        "yzhang.markdown-all-in-one",
+        "GitHub.codespaces"
       ]
     }
   },
