@@ -10,6 +10,16 @@ This repository is organized into the following top-level directories:
 - **`artifacts/`** – Rendered outputs and generated files (used for local development, not version controlled)
 - **`scripts/`** – Utility scripts for bootstrap, maintenance, and development workflows
 - **`docs/`** – Project documentation, architecture decisions, and operational guides
+- **`.github/workflows/`** – CI/CD workflows including the automated render pipeline
+
+## Automated Render Pipeline
+
+This repository includes an automated [render pipeline](docs/render-pipeline.md) that:
+- Exports data from the NetBox API
+- Generates Terraform tfvars and UniFi configuration files
+- Publishes artifacts for review and manual deployment
+
+**Important:** The render pipeline is read-only and does not apply infrastructure changes. See [docs/render-pipeline.md](docs/render-pipeline.md) for details.
 
 ## Quick Start
 
