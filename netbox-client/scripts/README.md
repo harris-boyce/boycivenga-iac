@@ -39,6 +39,27 @@ python render_tfvars.py --input-file examples/intent-minimal-schema.json
 
 **Documentation:** See [docs/netbox-tfvars-mapping.md](../../docs/netbox-tfvars-mapping.md)
 
+### `render_unifi.py`
+Convert NetBox intent-export data to UniFi controller JSON config files (one per site).
+
+**Usage:**
+```bash
+# From export directory
+python render_unifi.py --input-dir artifacts/intent-export
+
+# From single file
+python render_unifi.py --input-file examples/intent-minimal-schema.json
+```
+
+**Output:** `artifacts/unifi/site-{slug}.json`
+
+**Features:**
+- Deterministic output (sorted keys)
+- Site-specific resource grouping
+- UniFi-compatible JSON structure (site/network/vlan/wlan)
+
+**⚠️  WARNING:** Generated configs represent intended state only. Not ready for direct UniFi controller ingestion without review and validation.
+
 ### `seed_netbox.py`
 Seed NetBox with data from YAML configuration files.
 
@@ -76,6 +97,21 @@ python test_render_tfvars.py
 - File I/O operations
 - JSON key sorting
 
+### `test_render_unifi.py`
+Test suite for `render_unifi.py` to verify UniFi config conversion logic and determinism.
+
+**Usage:**
+```bash
+python test_render_unifi.py
+```
+
+**Tests:**
+- Site slug extraction
+- UniFi site/network/VLAN rendering
+- Deterministic output
+- File I/O operations
+- JSON key sorting
+
 ## Common Workflows
 
 ### Complete Export and Render Pipeline
@@ -85,10 +121,13 @@ export NETBOX_URL="http://localhost:8000/api/"
 export NETBOX_API_TOKEN="your-token-here"
 python export_intent.py
 
-# 2. Render Terraform tfvars
+# 2a. Render Terraform tfvars
 python render_tfvars.py --input-dir artifacts/intent-export
 
-# 3. Use with Terraform
+# 2b. Render UniFi configs
+python render_unifi.py --input-dir artifacts/intent-export
+
+# 3. Use with Terraform (example)
 terraform plan -var-file=artifacts/tfvars/site-pennington.tfvars.json
 ```
 
@@ -96,10 +135,14 @@ terraform plan -var-file=artifacts/tfvars/site-pennington.tfvars.json
 ```bash
 # Use example data (no NetBox required)
 python render_tfvars.py --input-file ../examples/intent-minimal-schema.json
+python render_unifi.py --input-file ../examples/intent-minimal-schema.json
 
 # Review generated files
 ls -lh artifacts/tfvars/
 cat artifacts/tfvars/site-pennington.tfvars.json
+
+ls -lh artifacts/unifi/
+cat artifacts/unifi/site-pennington.json
 ```
 
 ### Seed and Export Workflow
@@ -110,8 +153,9 @@ python seed_netbox.py ../examples/*.yaml
 # 2. Export from NetBox
 python export_intent.py
 
-# 3. Render tfvars
+# 3. Render tfvars and UniFi configs
 python render_tfvars.py --input-dir artifacts/intent-export
+python render_unifi.py --input-dir artifacts/intent-export
 ```
 
 ## Configuration
@@ -129,6 +173,9 @@ You can set these in your shell or use a `.env` file (not tracked in git).
 ```bash
 # Test render_tfvars.py
 python test_render_tfvars.py
+
+# Test render_unifi.py
+python test_render_unifi.py
 ```
 
 ### Code Quality
