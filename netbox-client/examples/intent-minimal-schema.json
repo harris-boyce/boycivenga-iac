@@ -1,0 +1,62 @@
+{
+  "_comment": "NetBox Minimal Intent Schema - Example Configuration",
+  "_description": "This file demonstrates the minimal set of NetBox objects required for basic network intent management across multiple sites.",
+  "sites": [
+    {
+      "name": "site-pennington",
+      "slug": "site-pennington",
+      "description": "Primary residence"
+    },
+    {
+      "name": "site-countfleetcourt",
+      "slug": "site-countfleetcourt",
+      "description": "Secondary lab site"
+    }
+  ],
+  "prefixes": [
+    {
+      "site": "site-pennington",
+      "prefix": "192.168.10.0/24",
+      "vlan": 10,
+      "description": "Home LAN",
+      "status": "active"
+    },
+    {
+      "site": "site-countfleetcourt",
+      "prefix": "192.168.20.0/24",
+      "vlan": 20,
+      "description": "Lab network",
+      "status": "active"
+    }
+  ],
+  "vlans": [
+    {
+      "site": "site-pennington",
+      "vlan_id": 10,
+      "name": "Home LAN",
+      "description": "Default VLAN for primary residence",
+      "status": "active"
+    },
+    {
+      "site": "site-countfleetcourt",
+      "vlan_id": 20,
+      "name": "Guest VLAN",
+      "description": "Guest network for lab site",
+      "status": "active"
+    }
+  ],
+  "tags": [
+    {
+      "name": "home-network",
+      "slug": "home-network",
+      "description": "Resources related to home network infrastructure",
+      "color": "2196f3"
+    },
+    {
+      "name": "lab-environment",
+      "slug": "lab-environment",
+      "description": "Lab and testing environment resources",
+      "color": "4caf50"
+    }
+  ]
+}
