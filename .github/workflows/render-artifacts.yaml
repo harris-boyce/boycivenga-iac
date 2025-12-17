@@ -1,0 +1,242 @@
+name: Render Artifacts
+
+on:
+  # Allow manual triggering from GitHub UI
+  workflow_dispatch:
+  # Run on schedule (e.g., daily at 2 AM UTC)
+  schedule:
+    - cron: '0 2 * * *'
+  # Optional: Run on push to main branch
+  push:
+    branches:
+      - main
+    paths:
+      - 'netbox-client/scripts/**'
+      - '.github/workflows/render-artifacts.yaml'
+
+# Prevent concurrent runs
+concurrency:
+  group: render-artifacts
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  render-artifacts:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.x'
+
+      - name: Install Python dependencies
+        run: |
+          pip install requests pyyaml
+
+      - name: Create artifacts directories
+        run: |
+          mkdir -p artifacts/intent-export
+          mkdir -p artifacts/tfvars
+          mkdir -p artifacts/unifi
+
+      - name: Export NetBox intent data
+        env:
+          NETBOX_URL: ${{ secrets.NETBOX_URL }}
+          NETBOX_API_TOKEN: ${{ secrets.NETBOX_API_TOKEN }}
+        run: |
+          python netbox-client/scripts/export_intent.py --output-dir artifacts/intent-export
+          echo "✅ NetBox export completed"
+          ls -lah artifacts/intent-export/
+
+      - name: Render Terraform tfvars
+        run: |
+          python netbox-client/scripts/render_tfvars.py --input-dir artifacts/intent-export --output-dir artifacts/tfvars
+          echo "✅ Terraform tfvars rendered"
+          ls -lah artifacts/tfvars/
+
+      - name: Render UniFi configurations
+        run: |
+          python netbox-client/scripts/render_unifi.py --input-dir artifacts/intent-export --output-dir artifacts/unifi
+          echo "✅ UniFi configurations rendered"
+          ls -lah artifacts/unifi/
+
+      - name: Generate artifact summary
+        run: |
+          echo "# Artifact Generation Summary" > artifacts/SUMMARY.md
+          echo "" >> artifacts/SUMMARY.md
+          echo "**Generated:** $(date -u +"%Y-%m-%d %H:%M:%S UTC")" >> artifacts/SUMMARY.md
+          echo "**Workflow Run:** [${{ github.run_number }}](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }})" >> artifacts/SUMMARY.md
+          echo "" >> artifacts/SUMMARY.md
+          echo "## NetBox Intent Export" >> artifacts/SUMMARY.md
+          echo "" >> artifacts/SUMMARY.md
+          echo "Files exported from NetBox API:" >> artifacts/SUMMARY.md
+          echo '```' >> artifacts/SUMMARY.md
+          ls -lh artifacts/intent-export/ >> artifacts/SUMMARY.md
+          echo '```' >> artifacts/SUMMARY.md
+          echo "" >> artifacts/SUMMARY.md
+          echo "## Terraform tfvars" >> artifacts/SUMMARY.md
+          echo "" >> artifacts/SUMMARY.md
+          echo "Site-specific Terraform variable files:" >> artifacts/SUMMARY.md
+          echo '```' >> artifacts/SUMMARY.md
+          ls -lh artifacts/tfvars/ >> artifacts/SUMMARY.md
+          echo '```' >> artifacts/SUMMARY.md
+          echo "" >> artifacts/SUMMARY.md
+          echo "## UniFi Configurations" >> artifacts/SUMMARY.md
+          echo "" >> artifacts/SUMMARY.md
+          echo "Site-specific UniFi controller configurations:" >> artifacts/SUMMARY.md
+          echo '```' >> artifacts/SUMMARY.md
+          ls -lh artifacts/unifi/ >> artifacts/SUMMARY.md
+          echo '```' >> artifacts/SUMMARY.md
+          echo "" >> artifacts/SUMMARY.md
+          echo "## Notes" >> artifacts/SUMMARY.md
+          echo "" >> artifacts/SUMMARY.md
+          echo "- All artifacts are read-only exports and do not apply infrastructure changes" >> artifacts/SUMMARY.md
+          echo "- Artifacts represent the current state of NetBox at generation time" >> artifacts/SUMMARY.md
+          echo "- See [docs/render-pipeline.md](../docs/render-pipeline.md) for details" >> artifacts/SUMMARY.md
+
+      - name: Upload NetBox Export Artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: netbox-intent-export
+          path: artifacts/intent-export/
+          retention-days: 30
+
+      - name: Upload Terraform tfvars Artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: terraform-tfvars
+          path: artifacts/tfvars/
+          retention-days: 30
+
+      - name: Upload UniFi Configuration Artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: unifi-configurations
+          path: artifacts/unifi/
+          retention-days: 30
+
+      - name: Upload Artifact Summary
+        uses: actions/upload-artifact@v4
+        with:
+          name: artifact-summary
+          path: artifacts/SUMMARY.md
+          retention-days: 30
+
+      - name: Create documentation PR
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          # Configure git
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+          # Create branch for documentation updates
+          BRANCH_NAME="render-artifacts/run-${{ github.run_number }}"
+          git checkout -b "$BRANCH_NAME"
+
+          # Copy summary to docs
+          cp artifacts/SUMMARY.md docs/render-pipeline-latest-run.md
+          git add docs/render-pipeline-latest-run.md
+
+          # Check if there are changes to commit
+          if git diff --staged --quiet; then
+            echo "No documentation changes to commit"
+            echo "PR_CREATED=false" >> $GITHUB_ENV
+          else
+            # Commit and push
+            git commit -m "docs: Update render pipeline run summary (#${{ github.run_number }})"
+            git push origin "$BRANCH_NAME"
+
+            # Create or update PR
+            PR_TITLE="Render Artifacts: Run #${{ github.run_number }}"
+
+            # Create PR body in a file to avoid quoting issues
+            cat > /tmp/pr-body.md << 'PRBODY'
+          ## Artifact Generation Complete
+
+          This PR documents the latest render pipeline execution.
+
+          **Workflow Run:** [%RUN_NUM%](%SERVER_URL%/%REPO%/actions/runs/%RUN_ID%)
+          **Generated:** %TIMESTAMP%
+
+          ### Artifacts Available
+
+          The following artifacts were generated and attached to the workflow run:
+          - **netbox-intent-export** - Raw NetBox data (sites, prefixes, VLANs, tags)
+          - **terraform-tfvars** - Terraform variable files per site
+          - **unifi-configurations** - UniFi controller configurations per site
+          - **artifact-summary** - Summary of all generated artifacts
+
+          ### Download Artifacts
+
+          Visit the [workflow run page](%SERVER_URL%/%REPO%/actions/runs/%RUN_ID%) to download artifacts.
+
+          ### Pipeline Details
+
+          This is a **read-only pipeline** that:
+          1. Exports data from the NetBox API
+          2. Renders Terraform tfvars files for each site
+          3. Renders UniFi configuration files for each site
+          4. Uploads all outputs as workflow artifacts
+
+          **No infrastructure changes are applied by this pipeline.**
+
+          See [docs/render-pipeline.md](docs/render-pipeline.md) for complete documentation.
+          PRBODY
+
+            # Replace placeholders
+            sed -i "s|%RUN_NUM%|${{ github.run_number }}|g" /tmp/pr-body.md
+            sed -i "s|%SERVER_URL%|${{ github.server_url }}|g" /tmp/pr-body.md
+            sed -i "s|%REPO%|${{ github.repository }}|g" /tmp/pr-body.md
+            sed -i "s|%RUN_ID%|${{ github.run_id }}|g" /tmp/pr-body.md
+            sed -i "s|%TIMESTAMP%|$(date -u +"%Y-%m-%d %H:%M:%S UTC")|g" /tmp/pr-body.md
+
+            # Check if PR already exists
+            EXISTING_PR=$(gh pr list --head "$BRANCH_NAME" --json number --jq '.[0].number' || echo "")
+
+            if [ -n "$EXISTING_PR" ]; then
+              echo "Updating existing PR #$EXISTING_PR"
+              gh pr edit "$EXISTING_PR" --body-file /tmp/pr-body.md
+            else
+              echo "Creating new PR"
+              gh pr create --title "$PR_TITLE" --body-file /tmp/pr-body.md --base main --head "$BRANCH_NAME"
+            fi
+
+            echo "PR_CREATED=true" >> $GITHUB_ENV
+          fi
+
+      - name: Add workflow summary
+        run: |
+          cat >> $GITHUB_STEP_SUMMARY << EOF
+          # Render Artifacts Workflow Complete ✅
+
+          ## Artifacts Generated
+
+          | Artifact | Description | Files |
+          |----------|-------------|-------|
+          | netbox-intent-export | Raw NetBox data export | $(ls -1 artifacts/intent-export/ | wc -l) files |
+          | terraform-tfvars | Terraform variable files | $(ls -1 artifacts/tfvars/*.json 2>/dev/null | wc -l) files |
+          | unifi-configurations | UniFi controller configs | $(ls -1 artifacts/unifi/*.json 2>/dev/null | wc -l) files |
+
+          ## Download Artifacts
+
+          All artifacts are available for download from this workflow run for 30 days.
+
+          ## What This Pipeline Does
+
+          This pipeline is **read-only** and does not apply any infrastructure changes:
+          - ✅ Reads from NetBox API
+          - ✅ Generates configuration files
+          - ✅ Uploads artifacts
+          - ✅ Creates documentation PR
+          - ❌ Does NOT apply Terraform
+          - ❌ Does NOT modify infrastructure
+
+          See [docs/render-pipeline.md](docs/render-pipeline.md) for complete documentation.
+          EOF
