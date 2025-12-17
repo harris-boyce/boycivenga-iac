@@ -190,6 +190,69 @@ python netbox-client/scripts/export_intent.py
 
 # 3. Review exported files
 ls -lh artifacts/intent-export/
+
+# 4. Render Terraform tfvars files from the export
+python netbox-client/scripts/render_tfvars.py --input-dir artifacts/intent-export
+```
+
+#### Rendering Terraform tfvars Files
+
+The `render_tfvars.py` script converts NetBox intent-export data into Terraform variable (tfvars) files, one per site. This enables infrastructure-as-code workflows with NetBox as the source of truth.
+
+**Prerequisites:**
+- NetBox export data (from `export_intent.py` or example files)
+- Python 3.x installed
+
+```bash
+# Generate tfvars from NetBox export directory
+python netbox-client/scripts/render_tfvars.py --input-dir artifacts/intent-export
+
+# Generate from a single consolidated intent file
+python netbox-client/scripts/render_tfvars.py \
+  --input-file netbox-client/examples/intent-minimal-schema.json
+
+# Specify custom output directory
+python netbox-client/scripts/render_tfvars.py \
+  --input-dir artifacts/intent-export \
+  --output-dir /tmp/my-tfvars
+```
+
+**What gets generated:**
+- One tfvars JSON file per site (e.g., `site-pennington.tfvars.json`)
+- Deterministic output (same input always produces same output)
+- Site-specific prefixes and VLANs
+- Shared tags across all sites
+
+**Output location:**
+- Default: `artifacts/tfvars/`
+- Files: `site-{slug}.tfvars.json`
+
+**Features:**
+- **Deterministic**: Sorted keys ensure consistent output for version control
+- **Site-grouped**: Each site gets its own tfvars file with associated resources
+- **Terraform-ready**: Output can be used directly with `terraform apply`
+
+**Field mapping documentation:**
+- See [docs/netbox-tfvars-mapping.md](../docs/netbox-tfvars-mapping.md) for complete field mapping details
+
+**Complete workflow example:**
+
+```bash
+# 1. Export from NetBox
+python netbox-client/scripts/export_intent.py
+
+# 2. Render tfvars files
+python netbox-client/scripts/render_tfvars.py --input-dir artifacts/intent-export
+
+# 3. Use with Terraform
+terraform plan -var-file=artifacts/tfvars/site-pennington.tfvars.json
+terraform apply -var-file=artifacts/tfvars/site-pennington.tfvars.json
+```
+
+**Testing:**
+Run the test suite to verify the conversion logic:
+```bash
+python netbox-client/scripts/test_render_tfvars.py
 ```
 
 #### Checking Status
