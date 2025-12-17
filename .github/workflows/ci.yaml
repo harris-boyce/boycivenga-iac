@@ -28,10 +28,17 @@ jobs:
 
       - name: Validate Terraform configuration
         run: |
-          if [ -d terraform ] && [ "$(ls -A terraform/*.tf 2>/dev/null)" ]; then
-            cd terraform
-            terraform init -backend=false
-            terraform validate
+          # Check if any .tf files exist in the repository
+          if find . -name "*.tf" -type f | grep -q .; then
+            # Find all directories containing .tf files
+            tf_dirs=$(find . -name "*.tf" -type f -exec dirname {} \; | sort -u)
+            for dir in $tf_dirs; do
+              echo "Validating Terraform in $dir"
+              cd "$dir"
+              terraform init -backend=false
+              terraform validate
+              cd - > /dev/null
+            done
           else
             echo "No Terraform files found, skipping terraform validate"
           fi
