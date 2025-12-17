@@ -383,9 +383,7 @@ Environment Variables:
         print(f"✅ Successfully exported: {', '.join(exported_resources)}")
 
     if failed_resources:
-        print(
-            f"⚠️  Failed to export (fetch errors): {', '.join(failed_resources)}"
-        )
+        print(f"⚠️  Failed to export (fetch errors): {', '.join(failed_resources)}")
 
     if not exported_resources:
         print("❌ No data was exported")
