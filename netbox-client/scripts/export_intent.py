@@ -76,7 +76,7 @@ HEADERS = {"Authorization": f"Token {TOKEN}", "Content-Type": "application/json"
 
 
 def fetch_sites():
-    """Fetch all sites from NetBox.
+    """Fetch all sites from NetBox with pagination support.
 
     API Endpoint: GET /api/dcim/sites/
 
@@ -84,22 +84,29 @@ def fetch_sites():
         List of site objects with their configuration data
     """
     print("📍 Fetching sites from NetBox...")
+    all_sites = []
+    url = f"{NETBOX_URL}dcim/sites/"
+
     try:
-        response = requests.get(f"{NETBOX_URL}dcim/sites/", headers=HEADERS)
-        response.raise_for_status()
-        data = response.json()
-        sites = data.get("results", [])
-        print(f"   Found {len(sites)} site(s)")
-        return sites
+        while url:
+            response = requests.get(url, headers=HEADERS)
+            response.raise_for_status()
+            data = response.json()
+            results = data.get("results", [])
+            all_sites.extend(results)
+            url = data.get("next")  # Get next page URL or None
+
+        print(f"   Found {len(all_sites)} site(s)")
+        return all_sites
     except requests.exceptions.RequestException as e:
         print(f"❌ Error fetching sites: {e}")
         if hasattr(e, "response") and e.response is not None:
             print(f"   Response: {e.response.text}")
-        return []
+        return None  # Return None to indicate error vs empty list
 
 
 def fetch_prefixes():
-    """Fetch all IP prefixes from NetBox.
+    """Fetch all IP prefixes from NetBox with pagination support.
 
     API Endpoint: GET /api/ipam/prefixes/
 
@@ -107,22 +114,29 @@ def fetch_prefixes():
         List of prefix objects with their configuration data
     """
     print("🌐 Fetching prefixes from NetBox...")
+    all_prefixes = []
+    url = f"{NETBOX_URL}ipam/prefixes/"
+
     try:
-        response = requests.get(f"{NETBOX_URL}ipam/prefixes/", headers=HEADERS)
-        response.raise_for_status()
-        data = response.json()
-        prefixes = data.get("results", [])
-        print(f"   Found {len(prefixes)} prefix(es)")
-        return prefixes
+        while url:
+            response = requests.get(url, headers=HEADERS)
+            response.raise_for_status()
+            data = response.json()
+            results = data.get("results", [])
+            all_prefixes.extend(results)
+            url = data.get("next")  # Get next page URL or None
+
+        print(f"   Found {len(all_prefixes)} prefix(es)")
+        return all_prefixes
     except requests.exceptions.RequestException as e:
         print(f"❌ Error fetching prefixes: {e}")
         if hasattr(e, "response") and e.response is not None:
             print(f"   Response: {e.response.text}")
-        return []
+        return None  # Return None to indicate error vs empty list
 
 
 def fetch_vlans():
-    """Fetch all VLANs from NetBox.
+    """Fetch all VLANs from NetBox with pagination support.
 
     API Endpoint: GET /api/ipam/vlans/
 
@@ -130,22 +144,29 @@ def fetch_vlans():
         List of VLAN objects with their configuration data
     """
     print("📡 Fetching VLANs from NetBox...")
+    all_vlans = []
+    url = f"{NETBOX_URL}ipam/vlans/"
+
     try:
-        response = requests.get(f"{NETBOX_URL}ipam/vlans/", headers=HEADERS)
-        response.raise_for_status()
-        data = response.json()
-        vlans = data.get("results", [])
-        print(f"   Found {len(vlans)} VLAN(s)")
-        return vlans
+        while url:
+            response = requests.get(url, headers=HEADERS)
+            response.raise_for_status()
+            data = response.json()
+            results = data.get("results", [])
+            all_vlans.extend(results)
+            url = data.get("next")  # Get next page URL or None
+
+        print(f"   Found {len(all_vlans)} VLAN(s)")
+        return all_vlans
     except requests.exceptions.RequestException as e:
         print(f"❌ Error fetching VLANs: {e}")
         if hasattr(e, "response") and e.response is not None:
             print(f"   Response: {e.response.text}")
-        return []
+        return None  # Return None to indicate error vs empty list
 
 
 def fetch_tags():
-    """Fetch all tags from NetBox.
+    """Fetch all tags from NetBox with pagination support.
 
     API Endpoint: GET /api/extras/tags/
 
@@ -153,18 +174,25 @@ def fetch_tags():
         List of tag objects with their configuration data
     """
     print("🏷️  Fetching tags from NetBox...")
+    all_tags = []
+    url = f"{NETBOX_URL}extras/tags/"
+
     try:
-        response = requests.get(f"{NETBOX_URL}extras/tags/", headers=HEADERS)
-        response.raise_for_status()
-        data = response.json()
-        tags = data.get("results", [])
-        print(f"   Found {len(tags)} tag(s)")
-        return tags
+        while url:
+            response = requests.get(url, headers=HEADERS)
+            response.raise_for_status()
+            data = response.json()
+            results = data.get("results", [])
+            all_tags.extend(results)
+            url = data.get("next")  # Get next page URL or None
+
+        print(f"   Found {len(all_tags)} tag(s)")
+        return all_tags
     except requests.exceptions.RequestException as e:
         print(f"❌ Error fetching tags: {e}")
         if hasattr(e, "response") and e.response is not None:
             print(f"   Response: {e.response.text}")
-        return []
+        return None  # Return None to indicate error vs empty list
 
 
 def export_to_json(data, file_path):
@@ -208,18 +236,27 @@ def export_resource(resource_name, data, output_dir):
 
     Args:
         resource_name: Name of the resource (e.g., 'sites', 'vlans')
-        data: Data to export
+        data: Data to export (None indicates error, empty list is valid)
         output_dir: Directory to write output files to
+
+    Returns:
+        True if export succeeded, False otherwise
     """
+    if data is None:
+        print(f"⚠️  Skipping export for {resource_name} due to fetch error")
+        return False
+
     if not data:
-        print(f"⚠️  No data to export for {resource_name}")
-        return
+        print(f"ℹ️  No {resource_name} found in NetBox (empty data)")
+        # Still export empty list for consistency
+        data = []
 
     json_file = output_dir / f"{resource_name}.json"
     yaml_file = output_dir / f"{resource_name}.yaml"
 
     export_to_json(data, json_file)
     export_to_yaml(data, yaml_file)
+    return True
 
 
 def main():
@@ -308,8 +345,7 @@ Environment Variables:
     # Export resources based on arguments
     if export_all or args.sites:
         sites = fetch_sites()
-        if sites:
-            export_resource("sites", sites, args.output_dir)
+        if export_resource("sites", sites, args.output_dir):
             exported_resources.append("sites")
         else:
             failed_resources.append("sites")
@@ -317,8 +353,7 @@ Environment Variables:
 
     if export_all or args.prefixes:
         prefixes = fetch_prefixes()
-        if prefixes:
-            export_resource("prefixes", prefixes, args.output_dir)
+        if export_resource("prefixes", prefixes, args.output_dir):
             exported_resources.append("prefixes")
         else:
             failed_resources.append("prefixes")
@@ -326,8 +361,7 @@ Environment Variables:
 
     if export_all or args.vlans:
         vlans = fetch_vlans()
-        if vlans:
-            export_resource("vlans", vlans, args.output_dir)
+        if export_resource("vlans", vlans, args.output_dir):
             exported_resources.append("vlans")
         else:
             failed_resources.append("vlans")
@@ -335,8 +369,7 @@ Environment Variables:
 
     if export_all or args.tags:
         tags = fetch_tags()
-        if tags:
-            export_resource("tags", tags, args.output_dir)
+        if export_resource("tags", tags, args.output_dir):
             exported_resources.append("tags")
         else:
             failed_resources.append("tags")
@@ -350,7 +383,9 @@ Environment Variables:
         print(f"✅ Successfully exported: {', '.join(exported_resources)}")
 
     if failed_resources:
-        print(f"⚠️  Failed to export (no data or errors): {', '.join(failed_resources)}")
+        print(
+            f"⚠️  Failed to export (fetch errors): {', '.join(failed_resources)}"
+        )
 
     if not exported_resources:
         print("❌ No data was exported")
