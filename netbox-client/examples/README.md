@@ -122,6 +122,118 @@ ip_addresses:
 - For local development, use the default NetBox token: `0123456789abcdef0123456789abcdef01234567`
 - For production, always use a dedicated API token with appropriate permissions
 
+## Exporting NetBox Intent Data
+
+After seeding NetBox with these example configurations, you can export the data using the `export_intent.py` script. This creates structured JSON and YAML files containing all sites, prefixes, VLANs, and tags.
+
+### Export Example
+
+```bash
+# 1. Seed NetBox with example data
+python netbox-client/scripts/seed_netbox.py netbox-client/examples/*.yaml
+
+# 2. Export the data
+python netbox-client/scripts/export_intent.py
+
+# 3. View exported files
+ls -lh artifacts/intent-export/
+```
+
+### Export Output Structure
+
+The export script generates the following files in `artifacts/intent-export/`:
+
+**Sites** (`sites.json`, `sites.yaml`):
+```json
+[
+  {
+    "id": 1,
+    "name": "site-pennington",
+    "slug": "site-pennington",
+    "description": "Primary residence",
+    "status": {"value": "active", "label": "Active"},
+    ...
+  },
+  {
+    "id": 2,
+    "name": "site-countfleetcourt",
+    "slug": "site-countfleetcourt",
+    "description": "Secondary site",
+    "status": {"value": "active", "label": "Active"},
+    ...
+  }
+]
+```
+
+**VLANs** (`vlans.json`, `vlans.yaml`):
+```json
+[
+  {
+    "id": 1,
+    "vid": 10,
+    "name": "Home VLAN",
+    "site": {
+      "id": 1,
+      "name": "site-pennington",
+      "slug": "site-pennington"
+    },
+    "description": "Main LAN",
+    "status": {"value": "active", "label": "Active"},
+    ...
+  },
+  ...
+]
+```
+
+**Prefixes** (`prefixes.json`, `prefixes.yaml`):
+```json
+[
+  {
+    "id": 1,
+    "prefix": "192.168.10.0/24",
+    "site": {
+      "id": 1,
+      "name": "site-pennington",
+      "slug": "site-pennington"
+    },
+    "vlan": {
+      "id": 1,
+      "vid": 10,
+      "name": "Home VLAN"
+    },
+    "description": "LAN",
+    "status": {"value": "active", "label": "Active"},
+    ...
+  },
+  ...
+]
+```
+
+**Tags** (`tags.json`, `tags.yaml`):
+```json
+[
+  {
+    "id": 1,
+    "name": "home-network",
+    "slug": "home-network",
+    "color": "2196f3",
+    "description": "Resources related to home network infrastructure",
+    ...
+  },
+  ...
+]
+```
+
+### API Endpoints Used by Export Script
+
+The export script queries the following NetBox API endpoints:
+- `GET /api/dcim/sites/` - List all sites
+- `GET /api/ipam/prefixes/` - List all IP prefixes
+- `GET /api/ipam/vlans/` - List all VLANs
+- `GET /api/extras/tags/` - List all tags
+
+See the parent directory README (`netbox-client/README.md`) for detailed usage instructions.
+
 ## See Also
 
 - [NetBox API Documentation](https://docs.netbox.dev/en/stable/integrations/rest-api/)
