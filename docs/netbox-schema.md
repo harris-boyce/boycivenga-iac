@@ -4,12 +4,358 @@ This document provides information about NetBox API configuration, data models, 
 
 ## Table of Contents
 
+- [Minimal Intent Schema](#minimal-intent-schema)
 - [API Configuration](#api-configuration)
 - [Authentication](#authentication)
 - [Environment Configuration](#environment-configuration)
 - [Data Models](#data-models)
 - [Integration Patterns](#integration-patterns)
 - [Multi-Environment Support](#multi-environment-support)
+
+## Minimal Intent Schema
+
+This section documents the minimal set of NetBox objects required for basic network infrastructure management in a home lab or small deployment environment. This simplified schema focuses on essential networking constructs without the full complexity of enterprise DCIM (Data Center Infrastructure Management) features.
+
+### Overview
+
+The minimal intent schema includes four core object types:
+
+1. **Sites** - Physical locations where network infrastructure is deployed
+2. **VLANs** - Virtual LANs for network segmentation
+3. **Prefixes** - IP address ranges (subnets) associated with networks
+4. **Tags** - Metadata labels for organizing and categorizing resources
+
+This minimal model is sufficient for:
+- Home network management across multiple physical locations
+- Lab environments with basic network segmentation
+- Small deployments requiring IP address management (IPAM)
+- Network intent documentation and automation
+
+### Core Objects
+
+#### Sites
+
+Sites represent physical locations where network infrastructure is deployed. Each site serves as a container for other resources like VLANs and IP prefixes.
+
+**Required Attributes:**
+- `name` - Human-readable name (e.g., "site-pennington")
+- `slug` - URL-friendly identifier (e.g., "site-pennington")
+
+**Optional Attributes:**
+- `description` - Detailed description of the site's purpose
+- `comments` - Additional notes or documentation
+- `facility` - Building or facility identifier
+- `asn` - Autonomous System Number for BGP (if applicable)
+- `time_zone` - IANA timezone identifier
+
+**Example:**
+```yaml
+sites:
+  - name: site-pennington
+    slug: site-pennington
+    description: Primary residence
+```
+
+**API Endpoint:** `dcim/sites/`
+
+#### VLANs
+
+VLANs (Virtual Local Area Networks) provide network segmentation and are typically associated with a specific site.
+
+**Required Attributes:**
+- `vid` - VLAN ID (1-4094)
+- `name` - VLAN name (e.g., "Home LAN")
+
+**Optional Attributes:**
+- `site` - Associated site ID
+- `status` - Operational status (active, reserved, deprecated)
+- `description` - Purpose or function of the VLAN
+- `tenant` - Multi-tenancy association (if applicable)
+- `role` - VLAN role classification
+
+**Example:**
+```yaml
+vlans:
+  - vlan_id: 10
+    name: Home LAN
+    description: Default VLAN for primary residence
+    status: active
+    site: site-pennington
+```
+
+**API Endpoint:** `ipam/vlans/`
+
+#### Prefixes
+
+Prefixes represent IP address ranges (subnets) and can be associated with sites and VLANs.
+
+**Required Attributes:**
+- `prefix` - IP network in CIDR notation (e.g., "192.168.10.0/24")
+
+**Optional Attributes:**
+- `site` - Associated site ID
+- `vlan` - Associated VLAN ID
+- `status` - Operational status (active, reserved, deprecated, container)
+- `description` - Purpose or function of the network
+- `is_pool` - Whether this prefix is an IP address pool
+- `mark_utilized` - Whether to track IP utilization
+
+**Example:**
+```yaml
+prefixes:
+  - prefix: 192.168.10.0/24
+    vlan: 10
+    description: Home LAN
+    status: active
+    site: site-pennington
+```
+
+**API Endpoint:** `ipam/prefixes/`
+
+#### Tags
+
+Tags provide a flexible way to categorize and organize NetBox resources. Tags can be applied to any object type.
+
+**Required Attributes:**
+- `name` - Tag name (e.g., "home-network")
+- `slug` - URL-friendly identifier (e.g., "home-network")
+
+**Optional Attributes:**
+- `color` - Hexadecimal color code (e.g., "2196f3")
+- `description` - Purpose or meaning of the tag
+
+**Example:**
+```yaml
+tags:
+  - name: home-network
+    slug: home-network
+    description: Resources related to home network infrastructure
+    color: 2196f3
+```
+
+**API Endpoint:** `extras/tags/`
+
+### Example: Multi-Site Home Lab
+
+This example demonstrates the minimal schema for a two-site home lab environment:
+
+**YAML Format** (`netbox-client/examples/intent-minimal-schema.yaml`):
+```yaml
+sites:
+  - name: site-pennington
+    slug: site-pennington
+    description: Primary residence
+  - name: site-countfleetcourt
+    slug: site-countfleetcourt
+    description: Secondary lab site
+
+prefixes:
+  - site: site-pennington
+    prefix: 192.168.10.0/24
+    vlan: 10
+    description: Home LAN
+    status: active
+  - site: site-countfleetcourt
+    prefix: 192.168.20.0/24
+    vlan: 20
+    description: Lab network
+    status: active
+
+vlans:
+  - site: site-pennington
+    vlan_id: 10
+    name: Home LAN
+    description: Default VLAN for primary residence
+    status: active
+  - site: site-countfleetcourt
+    vlan_id: 20
+    name: Guest VLAN
+    description: Guest network for lab site
+    status: active
+
+tags:
+  - name: home-network
+    slug: home-network
+    description: Resources related to home network infrastructure
+    color: 2196f3
+```
+
+**JSON Format** (`netbox-client/examples/intent-minimal-schema.json`):
+```json
+{
+  "sites": [
+    {
+      "name": "site-pennington",
+      "slug": "site-pennington",
+      "description": "Primary residence"
+    }
+  ],
+  "vlans": [
+    {
+      "vlan_id": 10,
+      "name": "Home LAN",
+      "description": "Default VLAN",
+      "status": "active"
+    }
+  ],
+  "prefixes": [
+    {
+      "prefix": "192.168.10.0/24",
+      "vlan": 10,
+      "description": "Home LAN",
+      "status": "active"
+    }
+  ]
+}
+```
+
+### CRUD Operations
+
+The repository provides example scripts for performing CRUD operations on the minimal intent schema:
+
+#### Basic CRUD Script
+
+`netbox-client/scripts/post_minimal_intent.py` demonstrates basic Create, Read, Update, and Delete operations:
+
+```python
+import requests
+import os
+
+NETBOX_URL = os.getenv("NETBOX_URL", "http://localhost:8000/api/")
+TOKEN = os.getenv("NETBOX_API_TOKEN")
+headers = {"Authorization": f"Token {TOKEN}", "Content-Type": "application/json"}
+
+# CREATE: Example site POST
+resp = requests.post(
+    f"{NETBOX_URL}dcim/sites/",
+    json={"name": "site-pennington", "slug": "site-pennington"},
+    headers=headers
+)
+print(resp.json())
+
+# READ: Get all sites
+resp = requests.get(f"{NETBOX_URL}dcim/sites/", headers=headers)
+sites = resp.json()["results"]
+
+# UPDATE: Modify a site
+site_id = sites[0]["id"]
+resp = requests.patch(
+    f"{NETBOX_URL}dcim/sites/{site_id}/",
+    json={"description": "Updated description"},
+    headers=headers
+)
+
+# DELETE: Remove a site (use with caution!)
+resp = requests.delete(f"{NETBOX_URL}dcim/sites/{site_id}/", headers=headers)
+```
+
+**Usage:**
+```bash
+export NETBOX_URL="http://localhost:8000/api/"
+export NETBOX_API_TOKEN="0123456789abcdef0123456789abcdef01234567"
+python netbox-client/scripts/post_minimal_intent.py
+```
+
+#### Production-Ready Seeding Script
+
+For more robust operations including idempotency and error handling, use `netbox-client/scripts/seed_netbox.py`:
+
+```bash
+python netbox-client/scripts/seed_netbox.py \
+    netbox-client/examples/intent-minimal-schema.yaml
+```
+
+### Relationship Model
+
+The minimal intent schema follows these relationships:
+
+```
+Sites
+  └── VLANs (many-to-one: each VLAN belongs to one site)
+  └── Prefixes (many-to-one: each prefix can be associated with one site)
+
+VLANs
+  └── Prefixes (one-to-many: each VLAN can have multiple prefixes)
+
+Tags
+  └── Can be applied to any object type (many-to-many)
+```
+
+### Schema Extensibility
+
+This minimal schema can be extended in the future to include additional NetBox objects:
+
+**DCIM Extensions:**
+- Device Types - Templates for network equipment
+- Devices - Physical network devices (switches, routers, access points)
+- Interfaces - Network interfaces on devices
+- Cables - Physical connectivity between interfaces
+- Racks - Physical rack layouts
+- Power - Power distribution and monitoring
+
+**IPAM Extensions:**
+- IP Addresses - Individual IP address assignments
+- VRFs - Virtual Routing and Forwarding instances
+- Route Targets - BGP route target communities
+- RIRs - Regional Internet Registries
+- Aggregates - Supernets for IP space planning
+
+**Organization Extensions:**
+- Tenants - Multi-tenancy support
+- Contact Roles - Organizational contacts
+- Custom Fields - User-defined metadata
+
+**Circuits:**
+- Providers - ISPs and service providers
+- Circuit Types - Categories of circuits
+- Circuits - WAN connections and links
+
+### Best Practices
+
+1. **Consistent Naming:** Use descriptive, consistent names for sites and networks
+2. **Slug Generation:** Always provide slugs or use consistent generation rules
+3. **Status Fields:** Use appropriate status values (active, reserved, deprecated)
+4. **Descriptions:** Document the purpose of each resource
+5. **Idempotency:** Check for existing resources before creating new ones
+6. **Tags:** Use tags to categorize resources for filtering and reporting
+7. **Validation:** Validate CIDR notation for prefixes before API calls
+
+### API Response Structure
+
+All NetBox API responses follow a consistent structure:
+
+**List Responses:**
+```json
+{
+  "count": 2,
+  "next": null,
+  "previous": null,
+  "results": [
+    { "id": 1, "name": "site-pennington", ... },
+    { "id": 2, "name": "site-countfleetcourt", ... }
+  ]
+}
+```
+
+**Detail Responses:**
+```json
+{
+  "id": 1,
+  "name": "site-pennington",
+  "slug": "site-pennington",
+  "description": "Primary residence",
+  "created": "2024-01-15T10:30:00Z",
+  "last_updated": "2024-01-15T10:30:00Z",
+  "url": "http://localhost:8000/api/dcim/sites/1/"
+}
+```
+
+### Additional Resources
+
+- Example files: `netbox-client/examples/intent-minimal-schema.yaml`
+- Example scripts: `netbox-client/scripts/post_minimal_intent.py`
+- Production script: `netbox-client/scripts/seed_netbox.py`
+- NetBox API docs: https://docs.netbox.dev/en/stable/integrations/rest-api/
 
 ## API Configuration
 
