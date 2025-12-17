@@ -52,7 +52,24 @@ import yaml
 SCRIPT_DIR = Path(__file__).parent
 sys.path.insert(0, str(SCRIPT_DIR))
 
-from nb_config import NETBOX_URL, TOKEN  # noqa: E402
+# Try to import from nb_config, but provide user-friendly error if token is missing
+try:
+    from nb_config import NETBOX_URL, TOKEN  # noqa: E402
+except AssertionError:
+    # nb_config raises AssertionError if TOKEN is not set
+    print("Error: NETBOX_API_TOKEN environment variable is required")
+    print("Example: export NETBOX_API_TOKEN='your-token-here'")
+    sys.exit(1)
+except ImportError:
+    # Fallback if nb_config is not available
+    import os
+
+    NETBOX_URL = os.getenv("NETBOX_URL", "http://localhost:8000/api/")
+    TOKEN = os.getenv("NETBOX_API_TOKEN")
+    if not TOKEN:
+        print("Error: NETBOX_API_TOKEN environment variable is required")
+        print("Example: export NETBOX_API_TOKEN='your-token-here'")
+        sys.exit(1)
 
 # API headers for authentication
 HEADERS = {"Authorization": f"Token {TOKEN}", "Content-Type": "application/json"}
@@ -284,36 +301,67 @@ Environment Variables:
 
     print()
 
+    # Track export success/failure
+    exported_resources = []
+    failed_resources = []
+
     # Export resources based on arguments
     if export_all or args.sites:
         sites = fetch_sites()
-        export_resource("sites", sites, args.output_dir)
+        if sites:
+            export_resource("sites", sites, args.output_dir)
+            exported_resources.append("sites")
+        else:
+            failed_resources.append("sites")
         print()
 
     if export_all or args.prefixes:
         prefixes = fetch_prefixes()
-        export_resource("prefixes", prefixes, args.output_dir)
+        if prefixes:
+            export_resource("prefixes", prefixes, args.output_dir)
+            exported_resources.append("prefixes")
+        else:
+            failed_resources.append("prefixes")
         print()
 
     if export_all or args.vlans:
         vlans = fetch_vlans()
-        export_resource("vlans", vlans, args.output_dir)
+        if vlans:
+            export_resource("vlans", vlans, args.output_dir)
+            exported_resources.append("vlans")
+        else:
+            failed_resources.append("vlans")
         print()
 
     if export_all or args.tags:
         tags = fetch_tags()
-        export_resource("tags", tags, args.output_dir)
+        if tags:
+            export_resource("tags", tags, args.output_dir)
+            exported_resources.append("tags")
+        else:
+            failed_resources.append("tags")
         print()
 
     print("=" * 60)
     print("Export Complete")
     print("=" * 60)
-    print(f"✅ All exports completed successfully")
+    
+    if exported_resources:
+        print(f"✅ Successfully exported: {', '.join(exported_resources)}")
+    
+    if failed_resources:
+        print(f"⚠️  Failed to export (no data or errors): {', '.join(failed_resources)}")
+    
+    if not exported_resources:
+        print("❌ No data was exported")
+        sys.exit(1)
+    
     print(f"   Output location: {args.output_dir.resolve()}")
     print()
-    print("Files created:")
-    for resource in ["sites", "prefixes", "vlans", "tags"]:
-        if export_all or getattr(args, resource, False):
+    
+    if exported_resources:
+        print("Files created:")
+        for resource in exported_resources:
             json_file = args.output_dir / f"{resource}.json"
             yaml_file = args.output_dir / f"{resource}.yaml"
             if json_file.exists():
