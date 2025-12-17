@@ -20,7 +20,7 @@ Usage:
     python netbox-client/scripts/post_minimal_intent.py
 
     # Or with explicit data file
-    python netbox-client/scripts/post_minimal_intent.py \\
+    python netbox-client/scripts/post_minimal_intent.py \
         netbox-client/examples/intent-minimal-schema.json
 
 Environment Variables:
@@ -31,20 +31,35 @@ Environment Variables:
 
 import argparse
 import json
-import os
 import sys
 
 import requests
 
-# NetBox API configuration
-NETBOX_URL = os.getenv("NETBOX_URL", "http://localhost:8000/api/")
-TOKEN = os.getenv("NETBOX_API_TOKEN")
+# Try to import from nb_config, but allow token validation to be deferred
+try:
+    # Add the scripts directory to the path for imports
+    import os
+    from pathlib import Path
 
-# Validate token
-if not TOKEN:
+    SCRIPT_DIR = Path(__file__).parent
+    sys.path.insert(0, str(SCRIPT_DIR))
+
+    # Import configuration - this will fail if TOKEN is not set
+    # We catch this and provide a more user-friendly message
+    from nb_config import NETBOX_URL, TOKEN
+except AssertionError:
+    # nb_config raises AssertionError if TOKEN is not set
     print("Error: NETBOX_API_TOKEN environment variable is required")
     print("Example: export NETBOX_API_TOKEN='your-token-here'")
     sys.exit(1)
+except ImportError:
+    # Fallback if nb_config is not available
+    NETBOX_URL = os.getenv("NETBOX_URL", "http://localhost:8000/api/")
+    TOKEN = os.getenv("NETBOX_API_TOKEN")
+    if not TOKEN:
+        print("Error: NETBOX_API_TOKEN environment variable is required")
+        print("Example: export NETBOX_API_TOKEN='your-token-here'")
+        sys.exit(1)
 
 # API headers for authentication
 HEADERS = {
