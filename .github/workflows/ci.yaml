@@ -1,0 +1,49 @@
+name: CI
+
+on:
+  push:
+    branches: ["*"]
+  pull_request:
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.x'
+
+      - name: Set up Terraform
+        uses: hashicorp/setup-terraform@v3
+
+      - name: Install Python dependencies
+        run: pip install pre-commit black flake8 isort
+
+      - name: Run pre-commit on all files
+        run: pre-commit run --all-files
+
+      - name: Validate Terraform configuration
+        run: |
+          # Check if any .tf files exist in the repository
+          if find . -name "*.tf" -type f | grep -q .; then
+            # Find all directories containing .tf files
+            tf_dirs=$(find . -name "*.tf" -type f -exec dirname {} \; | sort -u)
+            for dir in $tf_dirs; do
+              echo "Validating Terraform in $dir"
+              (cd "$dir" && terraform init -backend=false && terraform validate)
+            done
+          else
+            echo "No Terraform files found, skipping terraform validate"
+          fi
+
+      - name: Check Python formatting with black
+        run: black --check .
+
+      - name: Lint Python with flake8
+        run: flake8 --max-line-length=88 --extend-ignore=E203,W503 .

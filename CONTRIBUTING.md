@@ -8,6 +8,7 @@ Thank you for your interest in contributing to this Infrastructure as Code (IaC)
 - [Development Environment Setup](#development-environment-setup)
 - [Required Tools and Extensions](#required-tools-and-extensions)
 - [Pre-commit Hooks](#pre-commit-hooks)
+- [Continuous Integration](#continuous-integration)
 - [Code Standards](#code-standards)
 - [Branch Naming Conventions](#branch-naming-conventions)
 - [Commit Message Format](#commit-message-format)
@@ -160,6 +161,61 @@ To update pre-commit hooks to the latest versions:
 
 ```bash
 pre-commit autoupdate
+```
+
+## Continuous Integration
+
+This repository uses GitHub Actions for continuous integration to ensure code quality and consistency across all contributions.
+
+### CI Workflow
+
+The CI workflow (`.github/workflows/ci.yaml`) automatically runs on:
+- Every push to any branch
+- Every pull request
+
+### What the CI Checks
+
+The CI pipeline validates:
+
+1. **Pre-commit Hooks**: Runs all configured pre-commit hooks including:
+   - YAML validation
+   - AWS credentials detection
+   - File formatting (end-of-file, trailing whitespace)
+   - Large file detection
+   - Merge conflict detection
+   - Terraform formatting and validation
+   - Python formatting (black) and linting (flake8, isort)
+
+2. **Terraform Validation**: Validates Terraform configuration syntax and consistency
+
+3. **Python Code Quality**:
+   - `black --check`: Ensures Python code follows Black formatting standards
+   - `flake8`: Lints Python code for style and potential errors
+
+### Viewing CI Results
+
+- CI status is displayed on pull requests
+- Click "Details" next to each check to view logs
+- All checks must pass before merging
+
+### Running CI Checks Locally
+
+To run the same checks locally before pushing:
+
+```bash
+# Run all pre-commit hooks
+pre-commit run --all-files
+
+# Check Python formatting
+black --check .
+
+# Lint Python code
+flake8 --max-line-length=88 --extend-ignore=E203,W503 .
+
+# Validate Terraform (if you have .tf files)
+cd terraform
+terraform init -backend=false
+terraform validate
 ```
 
 ## Code Standards
