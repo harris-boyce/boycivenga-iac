@@ -1,0 +1,21 @@
+# NetBox Example Data - Site Countfleetcourt
+# This file contains example configuration for the secondary site
+
+site:
+  name: site-countfleetcourt
+  slug: site-countfleetcourt
+  description: Secondary site
+
+# IP prefixes for the site
+prefixes:
+  - prefix: 192.168.20.0/24
+    vlan: 20
+    description: LAN
+    status: active
+
+# VLANs for the site
+vlans:
+  - vlan_id: 20
+    name: Secondary VLAN
+    description: Main LAN for secondary site
+    status: active
