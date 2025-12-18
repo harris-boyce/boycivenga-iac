@@ -22,6 +22,8 @@ concurrency:
 permissions:
   contents: write
   pull-requests: write
+  id-token: write      # Required for GitHub OIDC attestation
+  attestations: write  # Required for creating attestations
 
 jobs:
   render-artifacts:
@@ -102,24 +104,49 @@ jobs:
 
       - name: Upload NetBox Export Artifacts
         uses: actions/upload-artifact@v4
+        id: upload-netbox-export
         with:
           name: netbox-intent-export
           path: artifacts/intent-export/
           retention-days: 30
 
+      - name: Attest NetBox Export Artifacts
+        uses: actions/attest-build-provenance@v1
+        with:
+          subject-path: 'artifacts/intent-export/*.json'
+
+      # Separate step for YAML files to ensure maximum compatibility
+      # While bash supports *.{json,yaml}, explicit patterns are more reliable
+      - name: Attest NetBox Export YAML Artifacts
+        uses: actions/attest-build-provenance@v1
+        with:
+          subject-path: 'artifacts/intent-export/*.yaml'
+
       - name: Upload Terraform tfvars Artifacts
         uses: actions/upload-artifact@v4
+        id: upload-terraform-tfvars
         with:
           name: terraform-tfvars
           path: artifacts/tfvars/
           retention-days: 30
 
+      - name: Attest Terraform tfvars Artifacts
+        uses: actions/attest-build-provenance@v1
+        with:
+          subject-path: 'artifacts/tfvars/*.json'
+
       - name: Upload UniFi Configuration Artifacts
         uses: actions/upload-artifact@v4
+        id: upload-unifi-configurations
         with:
           name: unifi-configurations
           path: artifacts/unifi/
           retention-days: 30
+
+      - name: Attest UniFi Configuration Artifacts
+        uses: actions/attest-build-provenance@v1
+        with:
+          subject-path: 'artifacts/unifi/*.json'
 
       - name: Upload Artifact Summary
         uses: actions/upload-artifact@v4
@@ -224,6 +251,15 @@ jobs:
           | terraform-tfvars | Terraform variable files | $(ls -1 artifacts/tfvars/*.json 2>/dev/null | wc -l) files |
           | unifi-configurations | UniFi controller configs | $(ls -1 artifacts/unifi/*.json 2>/dev/null | wc -l) files |
 
+          ## Attestations Generated 🔐
+
+          SLSA build provenance attestations have been generated for all artifacts using GitHub OIDC identity:
+          - ✅ NetBox exports (JSON and YAML)
+          - ✅ Terraform tfvars
+          - ✅ UniFi configurations
+
+          Attestations are cryptographically signed and provide verifiable proof of artifact provenance.
+
           ## Download Artifacts
 
           All artifacts are available for download from this workflow run for 30 days.
@@ -234,6 +270,7 @@ jobs:
           - ✅ Reads from NetBox API
           - ✅ Generates configuration files
           - ✅ Uploads artifacts
+          - ✅ Generates SLSA provenance attestations
           - ✅ Creates documentation PR
           - ❌ Does NOT apply Terraform
           - ❌ Does NOT modify infrastructure
