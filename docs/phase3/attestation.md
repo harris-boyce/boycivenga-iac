@@ -296,9 +296,9 @@ def verify_attestation(artifact_path, owner, repo):
         "--repo", repo,
         "--format", "json"
     ]
-    
+
     result = subprocess.run(cmd, capture_output=True, text=True)
-    
+
     if result.returncode == 0:
         attestation_data = json.loads(result.stdout)
         return True, attestation_data
