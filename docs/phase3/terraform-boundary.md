@@ -151,7 +151,7 @@ Error: no attestations found for artifact
 File: site-pennington.tfvars.json (modified)
 Path: artifacts/tfvars/site-pennington.tfvars.json
 Original SHA256: e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
-Modified SHA256: f4c1d55398fc2d259bfcf5d9007gc03538bf52f5750c045db506002c8963c966
+Modified SHA256: f4c1d55398fc2d259bfcf5d9007fc03538bf52f5750c045db506002c8963c966
 ```
 
 **Attestation Verification**:
@@ -160,13 +160,13 @@ $ gh attestation verify artifacts/tfvars/site-pennington.tfvars.json \
   --owner harris-boyce \
   --repo boycivenga-iac
 
-Loaded digest sha256:f4c1d55398fc2d259bfcf5d9007gc03538bf52f5750c045db506002c8963c966 for file://artifacts/tfvars/site-pennington.tfvars.json
+Loaded digest sha256:f4c1d55398fc2d259bfcf5d9007fc03538bf52f5750c045db506002c8963c966 for file://artifacts/tfvars/site-pennington.tfvars.json
 Loaded 1 attestation from GitHub API
 ✗ Verification failed!
 
 Error: artifact digest does not match attestation
 Expected: e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
-Actual:   f4c1d55398fc2d259bfcf5d9007gc03538bf52f5750c045db506002c8963c966
+Actual:   f4c1d55398fc2d259bfcf5d9007fc03538bf52f5750c045db506002c8963c966
 ```
 
 **Result**: ❌ **REJECTED** - This artifact has been modified after attestation and MUST NOT be used by Terraform.
@@ -185,7 +185,7 @@ Actual:   f4c1d55398fc2d259bfcf5d9007gc03538bf52f5750c045db506002c8963c966
 ```
 File: site-untrusted.tfvars.json
 Path: artifacts/tfvars/site-untrusted.tfvars.json
-SHA256: b5d8c99417ed3e368dfdf6e8118id14649dg63g6861f156fb617113d9074d2c3
+SHA256: b5d8c99417ed3e368dfdf6e8118fd14649df63f6861f156fb617113d9074d2c3
 ```
 
 **Attestation Verification**:
@@ -194,7 +194,7 @@ $ gh attestation verify artifacts/tfvars/site-untrusted.tfvars.json \
   --owner harris-boyce \
   --repo boycivenga-iac
 
-Loaded digest sha256:b5d8c99417ed3e368dfdf6e8118id14649dg63g6861f156fb617113d9074d2c3 for file://artifacts/tfvars/site-untrusted.tfvars.json
+Loaded digest sha256:b5d8c99417ed3e368dfdf6e8118fd14649df63f6861f156fb617113d9074d2c3 for file://artifacts/tfvars/site-untrusted.tfvars.json
 Loaded 1 attestation from GitHub API
 ✓ Signature verification succeeded
 
