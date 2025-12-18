@@ -316,7 +316,7 @@ jobs:
           # This step MUST NOT use continue-on-error
           # Verification failures MUST block deployment
           set -e
-          
+
           echo "=== Verifying Artifact Attestations ==="
           for file in terraform-tfvars/*.json; do
             echo "Verifying: $file"
@@ -324,7 +324,7 @@ jobs:
               --owner ${{ github.repository_owner }} \
               --repo $(echo ${{ github.repository }} | cut -d'/' -f2)
           done
-          
+
           echo "✓ All attestations verified successfully"
 
       - name: Setup Terraform
