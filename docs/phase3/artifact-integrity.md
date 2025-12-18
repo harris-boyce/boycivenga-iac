@@ -110,7 +110,7 @@ gh run download <run-id> --name terraform-tfvars
 
 **Current State**: Artifacts are not versioned in their filenames (site-based naming only).
 
-**Rationale**: 
+**Rationale**:
 - Artifacts are ephemeral and tied to workflow runs (30-day retention)
 - Workflow run ID provides sufficient uniqueness
 - SLSA attestations include commit SHA and timestamp for precise identification
