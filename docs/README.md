@@ -15,3 +15,5 @@ This directory contains comprehensive documentation for the infrastructure as co
 ### Phase 3: Supply Chain Security
 
 - **[phase3/attestation-scope.md](phase3/attestation-scope.md)** - Attestation design and scope definition for artifact provenance
+- **[phase3/attestation.md](phase3/attestation.md)** - SLSA provenance attestation implementation details
+- **[phase3/artifact-integrity.md](phase3/artifact-integrity.md)** - Artifact identity, naming, hashing, and integrity verification
