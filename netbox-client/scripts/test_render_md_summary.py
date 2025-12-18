@@ -25,9 +25,7 @@ def test_extract_site_slug():
 
     # Test with only name field
     site_without_slug = {"name": "site-pennington"}
-    assert (
-        render_md_summary.extract_site_slug(site_without_slug) == "site-pennington"
-    )
+    assert render_md_summary.extract_site_slug(site_without_slug) == "site-pennington"
 
     # Test with empty dict
     empty_site = {}
@@ -187,7 +185,9 @@ def test_render_site_markdown_prefix_without_vlan():
     # Check that the VLAN column shows a placeholder
     lines = result.split("\n")
     # Find the table line (starts with |), not the mermaid diagram line
-    prefix_lines = [line for line in lines if "10.0.0.0/8" in line and line.startswith("|")]
+    prefix_lines = [
+        line for line in lines if "10.0.0.0/8" in line and line.startswith("|")
+    ]
     assert len(prefix_lines) > 0, "Expected to find prefix in table"
     prefix_line = prefix_lines[0]
     # Should have — or similar for empty VLAN

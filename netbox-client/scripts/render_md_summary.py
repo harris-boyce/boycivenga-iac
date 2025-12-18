@@ -177,13 +177,12 @@ def generate_mermaid_topology(
         Mermaid diagram as a string
     """
     site_name = site.get("name", "Site")
-    site_slug = extract_site_slug(site)
 
     # Start mermaid diagram
     lines = [
         "```mermaid",
         "graph TD",
-        f"    Site[\"{site_name}\"]",
+        f'    Site["{site_name}"]',
     ]
 
     # Create VLAN nodes
@@ -194,7 +193,7 @@ def generate_mermaid_topology(
             vlan_id = vlan.get("vlan_id", "?")
             vlan_name = vlan.get("name", f"VLAN {vlan_id}")
             vlan_node_id = f"VLAN{vlan_id}"
-            lines.append(f"    {vlan_node_id}[\"VLAN {vlan_id}: {vlan_name}\"]")
+            lines.append(f'    {vlan_node_id}["VLAN {vlan_id}: {vlan_name}"]')
             lines.append(f"    Site --> {vlan_node_id}")
 
     # Add prefix nodes connected to their VLANs
@@ -213,7 +212,7 @@ def generate_mermaid_topology(
             else:
                 prefix_label = prefix_cidr
 
-            lines.append(f"    {prefix_node_id}[\"{prefix_label}\"]")
+            lines.append(f'    {prefix_node_id}["{prefix_label}"]')
 
             # Connect to VLAN if associated
             if vlan_id and vlan_id in vlan_map:
@@ -256,12 +255,14 @@ def render_site_markdown(
     ]
 
     # Site information
-    lines.extend([
-        "## Site Information",
-        "",
-        f"**Name:** {site_name}",
-        f"**Slug:** {site_slug}",
-    ])
+    lines.extend(
+        [
+            "## Site Information",
+            "",
+            f"**Name:** {site_name}",
+            f"**Slug:** {site_slug}",
+        ]
+    )
 
     if site_desc:
         lines.append(f"**Description:** {site_desc}")
@@ -269,24 +270,30 @@ def render_site_markdown(
     lines.append("")
 
     # Topology diagram
-    lines.extend([
-        "## Network Topology",
-        "",
-        generate_mermaid_topology(site, prefixes, vlans),
-        "",
-    ])
+    lines.extend(
+        [
+            "## Network Topology",
+            "",
+            generate_mermaid_topology(site, prefixes, vlans),
+            "",
+        ]
+    )
 
     # Prefixes section
-    lines.extend([
-        "## IP Prefixes",
-        "",
-    ])
+    lines.extend(
+        [
+            "## IP Prefixes",
+            "",
+        ]
+    )
 
     if prefixes:
-        lines.extend([
-            "| Prefix | VLAN ID | Description | Status |",
-            "|--------|---------|-------------|--------|",
-        ])
+        lines.extend(
+            [
+                "| Prefix | VLAN ID | Description | Status |",
+                "|--------|---------|-------------|--------|",
+            ]
+        )
         for prefix in prefixes:
             prefix_cidr = prefix.get("prefix", "N/A")
             vlan_id = prefix.get("vlan", "N/A")
@@ -301,16 +308,20 @@ def render_site_markdown(
     lines.append("")
 
     # VLANs section
-    lines.extend([
-        "## VLANs",
-        "",
-    ])
+    lines.extend(
+        [
+            "## VLANs",
+            "",
+        ]
+    )
 
     if vlans:
-        lines.extend([
-            "| VLAN ID | Name | Description | Status |",
-            "|---------|------|-------------|--------|",
-        ])
+        lines.extend(
+            [
+                "| VLAN ID | Name | Description | Status |",
+                "|---------|------|-------------|--------|",
+            ]
+        )
         for vlan in vlans:
             vlan_id = vlan.get("vlan_id", "N/A")
             name = vlan.get("name", "")
@@ -323,16 +334,20 @@ def render_site_markdown(
     lines.append("")
 
     # Tags section
-    lines.extend([
-        "## Tags",
-        "",
-    ])
+    lines.extend(
+        [
+            "## Tags",
+            "",
+        ]
+    )
 
     if tags:
-        lines.extend([
-            "| Name | Slug | Description | Color |",
-            "|------|------|-------------|-------|",
-        ])
+        lines.extend(
+            [
+                "| Name | Slug | Description | Color |",
+                "|------|------|-------------|-------|",
+            ]
+        )
         for tag in tags:
             name = tag.get("name", "")
             slug = tag.get("slug", "")
@@ -343,13 +358,15 @@ def render_site_markdown(
     else:
         lines.append("*No tags configured*")
 
-    lines.extend([
-        "",
-        "---",
-        "",
-        f"*Generated from NetBox intent data for {site_name}*",
-        "",
-    ])
+    lines.extend(
+        [
+            "",
+            "---",
+            "",
+            f"*Generated from NetBox intent data for {site_name}*",
+            "",
+        ]
+    )
 
     return "\n".join(lines)
 
@@ -381,10 +398,12 @@ Examples:
   python render_md_summary.py --input-dir artifacts/intent-export
 
   # Generate from consolidated intent file
-  python render_md_summary.py --input-file netbox-client/examples/intent-minimal-schema.json
+  python render_md_summary.py --input-file \\
+    netbox-client/examples/intent-minimal-schema.json
 
   # Specify custom output directory
-  python render_md_summary.py --input-dir artifacts/intent-export --output-dir /tmp/summaries
+  python render_md_summary.py --input-dir artifacts/intent-export \\
+    --output-dir /tmp/summaries
 
 Output Content:
   Each Markdown file includes:
