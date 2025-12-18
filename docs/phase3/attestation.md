@@ -231,62 +231,360 @@ The attestation process is reproducible:
 
 ## Verifying Attestations
 
-### Using GitHub CLI
+Attestation verification ensures that artifacts have not been tampered with and originate from trusted sources. This section describes both local development and CI verification approaches.
 
-Attestations can be verified using the GitHub CLI:
+**Important:** In Phase 3, verification is **observation only** (non-blocking). Verification failures are logged but do not prevent artifact usage. This allows monitoring of attestation integrity while minimizing operational disruption.
+
+### When to Use Verification
+
+**Recommended Use Cases**:
+- **Before deploying artifacts to production**: Verify attestations before applying Terraform configurations or UniFi settings
+- **Audit and compliance reviews**: Periodic verification of artifact provenance
+- **Security incident response**: Verify artifact integrity after a security event
+- **Development and testing**: Validate the attestation workflow is functioning correctly
+
+**Not Required For**:
+- Regular development workflows (verification is automated in CI)
+- Reviewing artifacts in pull requests (attestations are generated but verification is optional)
+- Local testing with artifacts generated locally (no attestations for local builds)
+
+### Local Development Verification
+
+#### Prerequisites
+
+To verify attestations locally, you need:
+
+1. **GitHub CLI** (`gh`) version 2.49.0 or later
+   ```bash
+   # Check version
+   gh --version
+   
+   # Install/update (macOS)
+   brew install gh
+   brew upgrade gh
+   
+   # Install/update (Linux)
+   # See https://github.com/cli/cli/blob/trunk/docs/install_linux.md
+   ```
+
+2. **Authenticated GitHub CLI**
+   ```bash
+   # Login to GitHub
+   gh auth login
+   
+   # Verify authentication
+   gh auth status
+   ```
+
+3. **Downloaded artifacts** from a workflow run
+
+#### Step 1: Download Artifacts
+
+First, download artifacts from a workflow run:
 
 ```bash
-# Verify an attestation for a specific artifact
-gh attestation verify <artifact-path> \
+# List recent render-artifacts workflow runs
+gh run list --workflow render-artifacts.yaml --limit 5
+
+# Download artifacts from a specific run
+gh run download <run-id>
+
+# Example: Download only terraform-tfvars
+gh run download <run-id> --name terraform-tfvars
+
+# Artifacts will be downloaded to the current directory
+```
+
+**Example Output**:
+```
+✓ Created directory terraform-tfvars
+✓ Created directory unifi-configurations
+✓ Created directory netbox-intent-export
+✓ Created directory artifact-summary
+
+Downloaded 4 artifacts (12.5 MB total)
+```
+
+#### Step 2: Verify Individual Artifacts
+
+Verify attestations for downloaded artifacts:
+
+```bash
+# Verify a Terraform tfvars file
+gh attestation verify terraform-tfvars/site-pennington.tfvars.json \
   --owner harris-boyce \
   --repo boycivenga-iac
 
-# Example: Verify a Terraform tfvars file
-gh attestation verify site-pennington.tfvars.json \
+# Verify a UniFi configuration file
+gh attestation verify unifi-configurations/site-countfleetcourt.json \
+  --owner harris-boyce \
+  --repo boycivenga-iac
+
+# Verify a NetBox export file
+gh attestation verify netbox-intent-export/sites.json \
   --owner harris-boyce \
   --repo boycivenga-iac
 ```
 
-**Prerequisites**:
-- GitHub CLI (`gh`) version 2.49.0 or later
-- Artifact file downloaded locally
-
-**Verification Output**:
+**Example Success Output**:
 ```
+Loaded digest sha256:a3b5c2d1e4f5a6b7c8d9e0f1a2b3c4d5e6f7a8b9c0d1e2f3a4b5c6d7e8f9a0b1 for file://terraform-tfvars/site-pennington.tfvars.json
+Loaded 1 attestation from GitHub API
 ✓ Verification succeeded!
 
-Attestation details:
-  Repository: harris-boyce/boycivenga-iac
-  Workflow: .github/workflows/render-artifacts.yaml
-  Commit SHA: abc123...
-  Issued at: 2025-12-18T05:30:00Z
+sha256:a3b5c2d1e4f5a6b7c8d9e0f1a2b3c4d5e6f7a8b9c0d1e2f3a4b5c6d7e8f9a0b1 was attested by:
+REPO                            PREDICATE_TYPE                  WORKFLOW
+harris-boyce/boycivenga-iac     https://slsa.dev/provenance/v1  .github/workflows/render-artifacts.yaml@refs/heads/main
 ```
 
-### Using Cosign
+**Example Failure Output**:
+```
+Loaded digest sha256:a3b5c2d1e4f5a6b7c8d9e0f1a2b3c4d5e6f7a8b9c0d1e2f3a4b5c6d7e8f9a0b1 for file://terraform-tfvars/site-pennington.tfvars.json
+✗ Verification failed!
 
-For more advanced verification or integration with other tools, use `cosign`:
+Error: no attestations found for artifact
+```
+
+#### Step 3: Verify Multiple Artifacts
+
+Verify all artifacts of a specific type:
 
 ```bash
-# Install cosign
-brew install cosign  # macOS
-# or download from https://github.com/sigstore/cosign/releases
+# Verify all Terraform tfvars files
+for file in terraform-tfvars/*.json; do
+  echo "Verifying: $file"
+  gh attestation verify "$file" \
+    --owner harris-boyce \
+    --repo boycivenga-iac
+  echo ""
+done
 
-# Verify attestation
-cosign verify-attestation \
-  --type slsaprovenance \
-  --certificate-identity-regexp "^https://github.com/harris-boyce/boycivenga-iac" \
-  --certificate-oidc-issuer https://token.actions.githubusercontent.com \
-  <artifact-oci-reference>
+# Verify all UniFi configuration files
+for file in unifi-configurations/*.json; do
+  echo "Verifying: $file"
+  gh attestation verify "$file" \
+    --owner harris-boyce \
+    --repo boycivenga-iac
+  echo ""
+done
+
+# Verify all NetBox export JSON files
+for file in netbox-intent-export/*.json; do
+  echo "Verifying: $file"
+  gh attestation verify "$file" \
+    --owner harris-boyce \
+    --repo boycivenga-iac
+  echo ""
+done
+
+# Verify all NetBox export YAML files
+for file in netbox-intent-export/*.yaml; do
+  echo "Verifying: $file"
+  gh attestation verify "$file" \
+    --owner harris-boyce \
+    --repo boycivenga-iac
+  echo ""
+done
 ```
+
+**Example Batch Output**:
+```
+Verifying: terraform-tfvars/site-pennington.tfvars.json
+✓ Verification succeeded!
+
+Verifying: terraform-tfvars/site-countfleetcourt.tfvars.json
+✓ Verification succeeded!
+
+2/2 artifacts verified successfully
+```
+
+#### Step 4: View Detailed Attestation Information
+
+Get detailed attestation information in JSON format:
+
+```bash
+# Verify with JSON output for programmatic use
+gh attestation verify terraform-tfvars/site-pennington.tfvars.json \
+  --owner harris-boyce \
+  --repo boycivenga-iac \
+  --format json | jq '.'
+
+# Extract specific fields
+gh attestation verify terraform-tfvars/site-pennington.tfvars.json \
+  --owner harris-boyce \
+  --repo boycivenga-iac \
+  --format json | jq '.verificationResult.statement'
+```
+
+**Example JSON Output**:
+```json
+{
+  "verificationResult": {
+    "verified": true,
+    "statement": {
+      "_type": "https://in-toto.io/Statement/v1",
+      "subject": [
+        {
+          "name": "artifacts/tfvars/site-pennington.tfvars.json",
+          "digest": {
+            "sha256": "a3b5c2d1e4f5a6b7c8d9e0f1a2b3c4d5e6f7a8b9c0d1e2f3a4b5c6d7e8f9a0b1"
+          }
+        }
+      ],
+      "predicateType": "https://slsa.dev/provenance/v1",
+      "predicate": {
+        "buildDefinition": {
+          "buildType": "https://actions.github.io/buildtypes/workflow/v1",
+          "externalParameters": {
+            "workflow": {
+              "ref": "refs/heads/main",
+              "repository": "https://github.com/harris-boyce/boycivenga-iac",
+              "path": ".github/workflows/render-artifacts.yaml"
+            }
+          }
+        }
+      }
+    }
+  }
+}
+```
+
+### CI Verification
+
+Attestation verification is automated in the `.github/workflows/verify-attestation.yaml` workflow.
+
+#### Automated Verification Workflow
+
+The verify-attestation workflow provides automated, scheduled verification of all artifacts:
+
+**Features**:
+- ✅ **Scheduled execution**: Runs weekly (Mondays at 3 AM UTC)
+- ✅ **Manual triggering**: Can be triggered manually with optional run ID
+- ✅ **Comprehensive coverage**: Verifies all artifact types (tfvars, UniFi, NetBox exports)
+- ✅ **Non-blocking**: Verification failures do not stop the workflow (observation only)
+- ✅ **Detailed reporting**: Generates summary with verification counts and status
+- ✅ **Audit trail**: All verification results are logged and accessible
+
+**Workflow File**: `.github/workflows/verify-attestation.yaml`
+
+#### Triggering Manual Verification
+
+Run verification manually via GitHub Actions UI:
+
+1. Navigate to **Actions** → **Verify Attestations (Observation Only)**
+2. Click **Run workflow**
+3. (Optional) Enter a specific workflow run ID to verify
+4. Click **Run workflow** button
+
+**Example via GitHub CLI**:
+```bash
+# Trigger verification for the latest successful run
+gh workflow run verify-attestation.yaml
+
+# Trigger verification for a specific run ID
+gh workflow run verify-attestation.yaml -f run_id=1234567890
+```
+
+#### Verification Workflow Output
+
+The workflow generates a detailed summary showing:
+
+| Artifact Type | Verified | Failed | Total |
+|---------------|----------|--------|-------|
+| Terraform tfvars | 2 | 0 | 2 |
+| UniFi configs | 2 | 0 | 2 |
+| NetBox exports (JSON) | 4 | 0 | 4 |
+| NetBox exports (YAML) | 4 | 0 | 4 |
+
+**Example Success Log**:
+```
+=== Verifying Terraform tfvars Attestations ===
+
+Verifying: site-pennington.tfvars.json
+✓ Verification succeeded!
+
+Verifying: site-countfleetcourt.tfvars.json
+✓ Verification succeeded!
+
+Summary: 2/2 verified, 0 failed
+```
+
+**Example Failure Log** (non-blocking):
+```
+=== Verifying Terraform tfvars Attestations ===
+
+Verifying: site-pennington.tfvars.json
+✗ Verification failed!
+Error: no attestations found for artifact
+
+Verifying: site-countfleetcourt.tfvars.json
+✓ Verification succeeded!
+
+Summary: 1/2 verified, 1 failed
+```
+
+#### Integrating Verification into Deployment Workflows
+
+When building deployment workflows that consume artifacts, integrate verification:
+
+```yaml
+# Example: Verify before deploying Terraform
+name: Deploy Infrastructure
+
+on:
+  workflow_dispatch:
+    inputs:
+      render_run_id:
+        description: 'Render artifacts workflow run ID'
+        required: true
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      actions: read
+      id-token: read
+    steps:
+      - name: Download Terraform tfvars
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh run download ${{ inputs.render_run_id }} --name terraform-tfvars
+
+      - name: Verify attestations (non-blocking)
+        env:
+          GH_TOKEN: ${{ github.token }}
+        continue-on-error: true
+        run: |
+          for file in terraform-tfvars/*.json; do
+            echo "Verifying: $file"
+            gh attestation verify "$file" \
+              --owner ${{ github.repository_owner }} \
+              --repo $(basename ${{ github.repository }})
+          done
+
+      - name: Apply Terraform
+        run: |
+          # Apply Terraform configurations
+          terraform init
+          terraform apply -var-file=terraform-tfvars/site-pennington.tfvars.json -auto-approve
+```
+
+**Key Points**:
+- Use `continue-on-error: true` for Phase 3 (observation only)
+- Log verification results for audit purposes
+- Consider making verification blocking in future phases for production deployments
 
 ### Programmatic Verification
 
-Attestations can also be verified programmatically:
+Attestations can be verified programmatically in scripts:
 
 **Python Example**:
 ```python
 import subprocess
 import json
+import sys
 
 def verify_attestation(artifact_path, owner, repo):
     """Verify GitHub attestation for an artifact."""
@@ -300,47 +598,127 @@ def verify_attestation(artifact_path, owner, repo):
     result = subprocess.run(cmd, capture_output=True, text=True)
 
     if result.returncode == 0:
-        attestation_data = json.loads(result.stdout)
-        return True, attestation_data
+        try:
+            attestation_data = json.loads(result.stdout)
+            return True, attestation_data
+        except json.JSONDecodeError:
+            return False, {"error": "Invalid JSON response"}
     else:
-        return False, result.stderr
+        return False, {"error": result.stderr}
 
-# Usage
-success, data = verify_attestation(
-    "site-pennington.tfvars.json",
-    "harris-boyce",
-    "boycivenga-iac"
-)
+# Verify all tfvars files
+import glob
 
-if success:
-    print("✓ Attestation verified successfully")
-    print(f"  Workflow: {data['workflow']}")
-    print(f"  Commit: {data['commit']}")
-else:
-    print(f"✗ Verification failed: {data}")
+artifacts = glob.glob("terraform-tfvars/*.json")
+verified_count = 0
+failed_count = 0
+
+for artifact in artifacts:
+    print(f"Verifying: {artifact}")
+    success, data = verify_attestation(
+        artifact,
+        "harris-boyce",
+        "boycivenga-iac"
+    )
+
+    if success:
+        print("  ✓ Verification succeeded")
+        verified_count += 1
+    else:
+        print(f"  ✗ Verification failed: {data.get('error', 'Unknown error')}")
+        failed_count += 1
+
+print(f"\nSummary: {verified_count}/{len(artifacts)} verified, {failed_count} failed")
+
+# Exit with non-zero code if any verification failed (optional for Phase 3)
+# sys.exit(1 if failed_count > 0 else 0)
 ```
 
-### CI/CD Integration
+**Bash Script Example**:
+```bash
+#!/bin/bash
+# verify-all-artifacts.sh - Verify all downloaded artifacts
 
-Attestation verification can be integrated into deployment workflows:
+set -e
 
-```yaml
-# Example: Verify attestation before applying Terraform
-- name: Download artifact
-  run: gh run download ${{ inputs.run-id }} --name terraform-tfvars
+OWNER="harris-boyce"
+REPO="boycivenga-iac"
 
-- name: Verify attestation
-  run: |
-    for file in artifacts/tfvars/*.json; do
-      gh attestation verify "$file" \
-        --owner harris-boyce \
-        --repo boycivenga-iac
-    done
+echo "=== Verifying All Artifacts ==="
+echo ""
 
-- name: Apply Terraform
-  if: success()
-  run: terraform apply -var-file=artifacts/tfvars/site-pennington.tfvars.json
+VERIFIED=0
+FAILED=0
+
+# Function to verify a file
+verify_file() {
+    local file="$1"
+    echo "Verifying: $(basename "$file")"
+    
+    if gh attestation verify "$file" --owner "$OWNER" --repo "$REPO" > /dev/null 2>&1; then
+        echo "  ✓ Verified"
+        VERIFIED=$((VERIFIED + 1))
+    else
+        echo "  ✗ Failed"
+        FAILED=$((FAILED + 1))
+    fi
+}
+
+# Verify Terraform tfvars
+echo "## Terraform tfvars"
+for file in terraform-tfvars/*.json 2>/dev/null; do
+    [ -f "$file" ] && verify_file "$file"
+done
+echo ""
+
+# Verify UniFi configs
+echo "## UniFi Configurations"
+for file in unifi-configurations/*.json 2>/dev/null; do
+    [ -f "$file" ] && verify_file "$file"
+done
+echo ""
+
+# Verify NetBox exports
+echo "## NetBox Exports (JSON)"
+for file in netbox-intent-export/*.json 2>/dev/null; do
+    [ -f "$file" ] && verify_file "$file"
+done
+echo ""
+
+echo "## NetBox Exports (YAML)"
+for file in netbox-intent-export/*.yaml 2>/dev/null; do
+    [ -f "$file" ] && verify_file "$file"
+done
+echo ""
+
+# Summary
+TOTAL=$((VERIFIED + FAILED))
+echo "=== Summary ==="
+echo "Verified: $VERIFIED"
+echo "Failed: $FAILED"
+echo "Total: $TOTAL"
+
+# Exit with success (Phase 3 observation only)
+exit 0
 ```
+
+### Using Cosign (Advanced)
+
+For more advanced verification or integration with non-GitHub tools, use `cosign`:
+
+```bash
+# Install cosign
+brew install cosign  # macOS
+# or download from https://github.com/sigstore/cosign/releases
+
+# Note: GitHub attestations are stored in the GitHub Attestations API,
+# not as OCI artifacts, so cosign verification requires additional setup
+# and is not the primary recommended method for this repository.
+
+# For GitHub attestations, use `gh attestation verify` instead (see above)
+```
+
+**Note**: While cosign supports SLSA provenance verification, GitHub's attestation workflow stores attestations in the GitHub Attestations API rather than as OCI artifacts. For this repository, `gh attestation verify` is the recommended verification method.
 
 ## Attestation Storage
 
