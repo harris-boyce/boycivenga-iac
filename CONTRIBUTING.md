@@ -368,6 +368,7 @@ refactor(terraform): restructure module directory layout
 - ✅ Commit messages follow Conventional Commits format
 - ✅ Branch name follows naming conventions
 - ✅ No merge conflicts with the base branch
+- ✅ **No un-attested artifacts** - All artifacts must have valid SLSA provenance attestations (see [Terraform Trust Boundary](docs/phase3/terraform-boundary.md) for details)
 
 ### Review Process
 
@@ -383,6 +384,7 @@ refactor(terraform): restructure module directory layout
      - Adherence to project standards
      - Security considerations
      - Documentation completeness
+     - **Artifact attestation** (if artifacts are present) - Verify all artifacts have valid attestations using `gh attestation verify` (see [Terraform Trust Boundary](docs/phase3/terraform-boundary.md#pr-merge-requirements))
 
 3. **Addressing Feedback:**
    - Make requested changes in new commits
