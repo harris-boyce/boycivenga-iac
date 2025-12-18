@@ -2,7 +2,9 @@
 
 ## Overview
 
-This document describes the implementation of artifact attestation in the render pipeline (Phase 3). Attestations provide cryptographic proof of artifact provenance, ensuring that artifacts have not been tampered with and originate from trusted sources using GitHub OIDC identity and SLSA provenance.
+This document describes the implementation of artifact attestation for the render pipeline (Phase 3). Attestations provide cryptographic proof of artifact provenance, ensuring that artifacts have not been tampered with and originate from trusted sources using GitHub OIDC identity and SLSA provenance.
+
+**Note**: While attestation is implemented as part of Phase 3, it extends the Phase 2 render workflow (`.github/workflows/render-artifacts.yaml`) with new attestation capabilities.
 
 ## Purpose
 
@@ -416,7 +418,7 @@ When using attested artifacts:
 
 Current limitations and known issues:
 
-- **YAML wildcards**: The `attest-build-provenance` action may have issues with certain glob patterns. We use separate steps for JSON and YAML to ensure all files are attested.
+- **Separate steps for file types**: We use separate attestation steps for JSON and YAML files to ensure maximum compatibility. While bash glob patterns support `*.{json,yaml}`, the `attest-build-provenance` action's behavior with brace expansion is not documented, so we use explicit patterns for reliability.
 - **Large artifacts**: Very large artifact sets may encounter API rate limits
 - **Private repositories**: Attestation visibility follows repository visibility settings
 - **Retention**: While attestations are retained indefinitely, artifacts have 30-day retention by default
@@ -561,7 +563,7 @@ gh run list --workflow render-artifacts.yaml --limit 10 \
 
 ## Related Documentation
 
-- [attestation-scope.md](attestation-scope.md) - Attestation design and scope definition
+- [attestation-scope.md](./attestation-scope.md) - Attestation design and scope definition
 - [../render-pipeline.md](../render-pipeline.md) - Complete render pipeline documentation
 - [SLSA Framework](https://slsa.dev/) - Supply-chain security framework
 - [Sigstore Documentation](https://docs.sigstore.dev/) - Sigstore project documentation

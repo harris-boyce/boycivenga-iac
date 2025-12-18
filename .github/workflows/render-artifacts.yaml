@@ -115,6 +115,8 @@ jobs:
         with:
           subject-path: 'artifacts/intent-export/*.json'
 
+      # Separate step for YAML files to ensure maximum compatibility
+      # While bash supports *.{json,yaml}, explicit patterns are more reliable
       - name: Attest NetBox Export YAML Artifacts
         uses: actions/attest-build-provenance@v1
         with:
