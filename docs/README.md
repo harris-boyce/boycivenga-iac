@@ -17,3 +17,5 @@ This directory contains comprehensive documentation for the infrastructure as co
 - **[phase3/attestation-scope.md](phase3/attestation-scope.md)** - Attestation design and scope definition for artifact provenance
 - **[phase3/attestation.md](phase3/attestation.md)** - SLSA provenance attestation implementation details
 - **[phase3/artifact-integrity.md](phase3/artifact-integrity.md)** - Artifact identity, naming, hashing, and integrity verification
+- **[phase3/threat-model.md](phase3/threat-model.md)** - Threat model, trust boundaries, and security coverage for Phase 3
+- **[phase3/terraform-boundary.md](phase3/terraform-boundary.md)** - Terraform trust boundary contract and attestation requirements
