@@ -246,7 +246,7 @@ Attestation verification ensures that artifacts have not been tampered with and 
 **Not Required For**:
 - Regular development workflows (verification is automated in CI)
 - Reviewing artifacts in pull requests (attestations are generated but verification is optional)
-- Local testing with artifacts generated locally (no attestations for local builds)
+- Local testing with artifacts generated locally (attestations are only created for CI-generated artifacts, not local builds)
 
 ### Local Development Verification
 
@@ -561,7 +561,7 @@ jobs:
             echo "Verifying: $file"
             gh attestation verify "$file" \
               --owner ${{ github.repository_owner }} \
-              --repo $(basename ${{ github.repository }})
+              --repo $(echo ${{ github.repository }} | cut -d'/' -f2)
           done
 
       - name: Apply Terraform
@@ -704,21 +704,20 @@ exit 0
 
 ### Using Cosign (Advanced)
 
-For more advanced verification or integration with non-GitHub tools, use `cosign`:
+**Note**: While cosign is a powerful tool for verifying SLSA provenance, GitHub's attestation workflow stores attestations in the GitHub Attestations API rather than as OCI artifacts. **For this repository, `gh attestation verify` is the recommended and primary verification method.**
+
+For more advanced verification or integration with non-GitHub tools, cosign can be used with additional setup:
 
 ```bash
 # Install cosign
 brew install cosign  # macOS
 # or download from https://github.com/sigstore/cosign/releases
 
-# Note: GitHub attestations are stored in the GitHub Attestations API,
-# not as OCI artifacts, so cosign verification requires additional setup
-# and is not the primary recommended method for this repository.
-
-# For GitHub attestations, use `gh attestation verify` instead (see above)
+# Note: GitHub attestations require specific configuration for cosign verification
+# See GitHub's documentation for detailed cosign integration steps
 ```
 
-**Note**: While cosign supports SLSA provenance verification, GitHub's attestation workflow stores attestations in the GitHub Attestations API rather than as OCI artifacts. For this repository, `gh attestation verify` is the recommended verification method.
+**Recommendation**: Use `gh attestation verify` (documented above) for all standard verification workflows in this repository.
 
 ## Attestation Storage
 

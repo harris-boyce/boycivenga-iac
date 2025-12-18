@@ -125,7 +125,7 @@ jobs:
 
             if gh attestation verify "$file" \
                 --owner ${{ github.repository_owner }} \
-                --repo $(basename ${{ github.repository }}) 2>&1; then
+                --repo $(echo ${{ github.repository }} | cut -d'/' -f2) 2>&1; then
               echo "  ✅ Verification succeeded"
               VERIFIED=$((VERIFIED + 1))
             else
@@ -168,7 +168,7 @@ jobs:
 
             if gh attestation verify "$file" \
                 --owner ${{ github.repository_owner }} \
-                --repo $(basename ${{ github.repository }}) 2>&1; then
+                --repo $(echo ${{ github.repository }} | cut -d'/' -f2) 2>&1; then
               echo "  ✅ Verification succeeded"
               VERIFIED=$((VERIFIED + 1))
             else
@@ -211,7 +211,7 @@ jobs:
 
             if gh attestation verify "$file" \
                 --owner ${{ github.repository_owner }} \
-                --repo $(basename ${{ github.repository }}) 2>&1; then
+                --repo $(echo ${{ github.repository }} | cut -d'/' -f2) 2>&1; then
               echo "  ✅ Verification succeeded"
               VERIFIED=$((VERIFIED + 1))
             else
@@ -254,7 +254,7 @@ jobs:
 
             if gh attestation verify "$file" \
                 --owner ${{ github.repository_owner }} \
-                --repo $(basename ${{ github.repository }}) 2>&1; then
+                --repo $(echo ${{ github.repository }} | cut -d'/' -f2) 2>&1; then
               echo "  ✅ Verification succeeded"
               VERIFIED=$((VERIFIED + 1))
             else
