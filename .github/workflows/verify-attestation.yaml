@@ -47,15 +47,15 @@ jobs:
               --limit 1 \
               --json databaseId \
               --jq '.[0].databaseId')
-            
+
             if [ -z "$RUN_ID" ]; then
               echo "::error::No successful render-artifacts workflow runs found"
               exit 1
             fi
-            
+
             echo "Using latest successful run ID: $RUN_ID"
           fi
-          
+
           echo "run_id=$RUN_ID" >> $GITHUB_OUTPUT
 
       - name: Download artifacts to verify
@@ -63,33 +63,33 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           RUN_ID="${{ steps.determine-run.outputs.run_id }}"
-          
+
           echo "Downloading artifacts from run $RUN_ID..."
-          
+
           # Create directories for artifacts
           mkdir -p artifacts/tfvars
           mkdir -p artifacts/unifi
           mkdir -p artifacts/intent-export
-          
+
           # Download all artifact bundles
           gh run download "$RUN_ID" --dir artifacts-temp || true
-          
+
           # Move files to expected locations
           if [ -d "artifacts-temp/terraform-tfvars" ]; then
             mv artifacts-temp/terraform-tfvars/* artifacts/tfvars/ 2>/dev/null || true
           fi
-          
+
           if [ -d "artifacts-temp/unifi-configurations" ]; then
             mv artifacts-temp/unifi-configurations/* artifacts/unifi/ 2>/dev/null || true
           fi
-          
+
           if [ -d "artifacts-temp/netbox-intent-export" ]; then
             mv artifacts-temp/netbox-intent-export/* artifacts/intent-export/ 2>/dev/null || true
           fi
-          
+
           # Clean up temp directory
           rm -rf artifacts-temp
-          
+
           echo "Artifacts downloaded successfully"
           echo ""
           echo "Artifact counts:"
@@ -106,11 +106,11 @@ jobs:
         run: |
           echo "=== Verifying Terraform tfvars Attestations ==="
           echo ""
-          
+
           VERIFIED=0
           FAILED=0
           TOTAL=0
-          
+
           if [ ! -d "artifacts/tfvars" ] || [ -z "$(ls -A artifacts/tfvars/*.json 2>/dev/null)" ]; then
             echo "⚠️  No Terraform tfvars artifacts found to verify"
             echo "verified=0" >> $GITHUB_OUTPUT
@@ -118,11 +118,11 @@ jobs:
             echo "total=0" >> $GITHUB_OUTPUT
             exit 0
           fi
-          
+
           for file in artifacts/tfvars/*.json; do
             TOTAL=$((TOTAL + 1))
             echo "Verifying: $(basename "$file")"
-            
+
             if gh attestation verify "$file" \
                 --owner ${{ github.repository_owner }} \
                 --repo $(basename ${{ github.repository }}) 2>&1; then
@@ -134,11 +134,11 @@ jobs:
             fi
             echo ""
           done
-          
+
           echo "verified=$VERIFIED" >> $GITHUB_OUTPUT
           echo "failed=$FAILED" >> $GITHUB_OUTPUT
           echo "total=$TOTAL" >> $GITHUB_OUTPUT
-          
+
           echo "Summary: $VERIFIED/$TOTAL verified, $FAILED failed"
 
       - name: Verify UniFi configuration attestations
@@ -149,11 +149,11 @@ jobs:
         run: |
           echo "=== Verifying UniFi Configuration Attestations ==="
           echo ""
-          
+
           VERIFIED=0
           FAILED=0
           TOTAL=0
-          
+
           if [ ! -d "artifacts/unifi" ] || [ -z "$(ls -A artifacts/unifi/*.json 2>/dev/null)" ]; then
             echo "⚠️  No UniFi configuration artifacts found to verify"
             echo "verified=0" >> $GITHUB_OUTPUT
@@ -161,11 +161,11 @@ jobs:
             echo "total=0" >> $GITHUB_OUTPUT
             exit 0
           fi
-          
+
           for file in artifacts/unifi/*.json; do
             TOTAL=$((TOTAL + 1))
             echo "Verifying: $(basename "$file")"
-            
+
             if gh attestation verify "$file" \
                 --owner ${{ github.repository_owner }} \
                 --repo $(basename ${{ github.repository }}) 2>&1; then
@@ -177,11 +177,11 @@ jobs:
             fi
             echo ""
           done
-          
+
           echo "verified=$VERIFIED" >> $GITHUB_OUTPUT
           echo "failed=$FAILED" >> $GITHUB_OUTPUT
           echo "total=$TOTAL" >> $GITHUB_OUTPUT
-          
+
           echo "Summary: $VERIFIED/$TOTAL verified, $FAILED failed"
 
       - name: Verify NetBox export JSON attestations
@@ -192,11 +192,11 @@ jobs:
         run: |
           echo "=== Verifying NetBox Export JSON Attestations ==="
           echo ""
-          
+
           VERIFIED=0
           FAILED=0
           TOTAL=0
-          
+
           if [ ! -d "artifacts/intent-export" ] || [ -z "$(ls -A artifacts/intent-export/*.json 2>/dev/null)" ]; then
             echo "⚠️  No NetBox JSON export artifacts found to verify"
             echo "verified=0" >> $GITHUB_OUTPUT
@@ -204,11 +204,11 @@ jobs:
             echo "total=0" >> $GITHUB_OUTPUT
             exit 0
           fi
-          
+
           for file in artifacts/intent-export/*.json; do
             TOTAL=$((TOTAL + 1))
             echo "Verifying: $(basename "$file")"
-            
+
             if gh attestation verify "$file" \
                 --owner ${{ github.repository_owner }} \
                 --repo $(basename ${{ github.repository }}) 2>&1; then
@@ -220,11 +220,11 @@ jobs:
             fi
             echo ""
           done
-          
+
           echo "verified=$VERIFIED" >> $GITHUB_OUTPUT
           echo "failed=$FAILED" >> $GITHUB_OUTPUT
           echo "total=$TOTAL" >> $GITHUB_OUTPUT
-          
+
           echo "Summary: $VERIFIED/$TOTAL verified, $FAILED failed"
 
       - name: Verify NetBox export YAML attestations
@@ -235,11 +235,11 @@ jobs:
         run: |
           echo "=== Verifying NetBox Export YAML Attestations ==="
           echo ""
-          
+
           VERIFIED=0
           FAILED=0
           TOTAL=0
-          
+
           if [ ! -d "artifacts/intent-export" ] || [ -z "$(ls -A artifacts/intent-export/*.yaml 2>/dev/null)" ]; then
             echo "⚠️  No NetBox YAML export artifacts found to verify"
             echo "verified=0" >> $GITHUB_OUTPUT
@@ -247,11 +247,11 @@ jobs:
             echo "total=0" >> $GITHUB_OUTPUT
             exit 0
           fi
-          
+
           for file in artifacts/intent-export/*.yaml; do
             TOTAL=$((TOTAL + 1))
             echo "Verifying: $(basename "$file")"
-            
+
             if gh attestation verify "$file" \
                 --owner ${{ github.repository_owner }} \
                 --repo $(basename ${{ github.repository }}) 2>&1; then
@@ -263,11 +263,11 @@ jobs:
             fi
             echo ""
           done
-          
+
           echo "verified=$VERIFIED" >> $GITHUB_OUTPUT
           echo "failed=$FAILED" >> $GITHUB_OUTPUT
           echo "total=$TOTAL" >> $GITHUB_OUTPUT
-          
+
           echo "Summary: $VERIFIED/$TOTAL verified, $FAILED failed"
 
       - name: Generate verification summary
@@ -275,49 +275,49 @@ jobs:
         run: |
           cat >> $GITHUB_STEP_SUMMARY << 'EOF'
           # Attestation Verification Report 🔐
-          
+
           **Note:** This is an observation-only workflow. Verification failures do not block operations.
-          
+
           ## Verification Results
-          
+
           | Artifact Type | Verified | Failed | Total |
           |---------------|----------|--------|-------|
           | Terraform tfvars | ${{ steps.verify-tfvars.outputs.verified || '0' }} | ${{ steps.verify-tfvars.outputs.failed || '0' }} | ${{ steps.verify-tfvars.outputs.total || '0' }} |
           | UniFi configs | ${{ steps.verify-unifi.outputs.verified || '0' }} | ${{ steps.verify-unifi.outputs.failed || '0' }} | ${{ steps.verify-unifi.outputs.total || '0' }} |
           | NetBox exports (JSON) | ${{ steps.verify-netbox-json.outputs.verified || '0' }} | ${{ steps.verify-netbox-json.outputs.failed || '0' }} | ${{ steps.verify-netbox-json.outputs.total || '0' }} |
           | NetBox exports (YAML) | ${{ steps.verify-netbox-yaml.outputs.verified || '0' }} | ${{ steps.verify-netbox-yaml.outputs.failed || '0' }} | ${{ steps.verify-netbox-yaml.outputs.total || '0' }} |
-          
+
           ## What This Workflow Does
-          
+
           This workflow demonstrates attestation verification for artifacts generated by the render pipeline:
-          
+
           - ✅ Downloads artifacts from a workflow run
           - ✅ Verifies SLSA provenance attestations using `gh attestation verify`
           - ✅ Reports verification results
           - ⚠️  **Non-blocking**: Failures are logged but do not fail the workflow
-          
+
           ## Verified Run
-          
+
           - **Run ID**: ${{ steps.determine-run.outputs.run_id }}
           - **Run URL**: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ steps.determine-run.outputs.run_id }}
-          
+
           ## About Attestations
-          
+
           Attestations provide cryptographic proof that artifacts:
           - Were generated by the trusted render-artifacts workflow
           - Have not been modified since generation
           - Can be traced to a specific commit and workflow run
-          
+
           See [docs/phase3/attestation.md](../docs/phase3/attestation.md) for complete documentation.
-          
+
           ## Troubleshooting
-          
+
           If verification fails:
           1. Ensure artifacts were attested in the render-artifacts workflow
           2. Check that workflow permissions include `id-token: write` and `attestations: write`
           3. Verify artifacts have not been modified since download
           4. Review workflow logs for detailed error messages
-          
+
           For more help, see the troubleshooting section in [docs/phase3/attestation.md](../docs/phase3/attestation.md).
           EOF
 

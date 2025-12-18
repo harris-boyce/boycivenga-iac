@@ -258,11 +258,11 @@ To verify attestations locally, you need:
    ```bash
    # Check version
    gh --version
-   
+
    # Install/update (macOS)
    brew install gh
    brew upgrade gh
-   
+
    # Install/update (Linux)
    # See https://github.com/cli/cli/blob/trunk/docs/install_linux.md
    ```
@@ -271,7 +271,7 @@ To verify attestations locally, you need:
    ```bash
    # Login to GitHub
    gh auth login
-   
+
    # Verify authentication
    gh auth status
    ```
@@ -654,7 +654,7 @@ FAILED=0
 verify_file() {
     local file="$1"
     echo "Verifying: $(basename "$file")"
-    
+
     if gh attestation verify "$file" --owner "$OWNER" --repo "$REPO" > /dev/null 2>&1; then
         echo "  ✓ Verified"
         VERIFIED=$((VERIFIED + 1))
