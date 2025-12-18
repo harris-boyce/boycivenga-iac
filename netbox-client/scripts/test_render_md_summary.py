@@ -9,10 +9,9 @@ import sys
 import tempfile
 from pathlib import Path
 
-# Add parent directory to path for imports
+# Add scripts directory to path for imports
 # This allows importing render_md_summary module for testing without
-# requiring a package structure. This is acceptable for simple test scripts
-# in the same directory as the module being tested.
+# requiring a package structure. Both files are in the scripts directory.
 sys.path.insert(0, str(Path(__file__).parent))
 
 import render_md_summary  # noqa: E402
