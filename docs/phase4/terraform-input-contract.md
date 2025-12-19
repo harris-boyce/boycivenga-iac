@@ -87,7 +87,7 @@ Missing or invalid required fields MUST cause Terraform plan operations to fail.
 
 | Field | Type | Required | Constraints | Description |
 |-------|------|----------|-------------|-------------|
-| `cidr` | string | **Yes** | Valid CIDR notation | IP prefix (e.g., `"192.168.10.0/24"`) |
+| `cidr` | string | **Yes** | CIDR format: `x.x.x.x/y` | IP prefix (e.g., `"192.168.10.0/24"`). Format validated by schema; semantic validation by Terraform. |
 | `vlan_id` | number | No | 1-4094 | Associated VLAN ID |
 | `description` | string | No | - | Prefix description |
 | `status` | string | No | Valid values: `"active"`, `"reserved"`, `"deprecated"` | Prefix status |
@@ -205,8 +205,8 @@ This JSON Schema provides formal validation rules for Terraform input artifacts:
         "properties": {
           "cidr": {
             "type": "string",
-            "pattern": "^(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\\.(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\\.(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\\.(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)/(3[0-2]|[12]?[0-9])$",
-            "description": "IP prefix in CIDR notation (validates octets 0-255 and prefix length 0-32)",
+            "pattern": "^\\d{1,3}\\.\\d{1,3}\\.\\d{1,3}\\.\\d{1,3}/\\d{1,2}$",
+            "description": "IP prefix in CIDR notation. Basic format validation only; semantic validation (valid IP ranges, prefix length) is performed by Terraform provider.",
             "example": "192.168.10.0/24"
           },
           "vlan_id": {
