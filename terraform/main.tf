@@ -18,13 +18,13 @@ provider "unifi" {
   # - password: UniFi controller password (env: UNIFI_PASSWORD)
   # - api_url: UniFi controller API URL (env: UNIFI_API)
   # - allow_insecure: Allow insecure TLS connections (default: false)
-  
+
   # Using environment variables for credentials
   # These can be stubbed for plan-only operations
   username = var.unifi_username
   password = var.unifi_password
   api_url  = var.unifi_api_url
-  
+
   # Allow insecure connections for lab/development environments
   allow_insecure = var.unifi_allow_insecure
 }
@@ -42,14 +42,14 @@ locals {
 # VLANs from NetBox intent
 resource "unifi_network" "vlans" {
   for_each = { for vlan in var.vlans : vlan.vlan_id => vlan }
-  
+
   name    = each.value.name
   purpose = "corporate"
-  
+
   subnet       = lookup(local.vlan_subnets, each.key, null)
   vlan_id      = each.value.vlan_id
   dhcp_enabled = true
-  
+
   # Use prefix CIDR if available for this VLAN
   # Otherwise, this will need to be configured manually
 }
