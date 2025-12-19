@@ -1,0 +1,207 @@
+name: 'Verify Artifact Attestations'
+description: 'Verifies GitHub Actions attestations for artifacts with fail-closed behavior in production'
+author: 'harris-boyce'
+
+inputs:
+  artifact-path:
+    description: 'Path to artifact file(s) to verify (supports glob patterns like artifacts/*.json)'
+    required: true
+  environment:
+    description: 'Environment mode: "prod" (fail-closed) or "dev" (allow bypass)'
+    required: false
+    default: 'prod'
+  allow-bypass:
+    description: 'Explicitly allow bypass of attestation verification (only effective in dev mode)'
+    required: false
+    default: 'false'
+  repo-owner:
+    description: 'Repository owner for attestation verification (defaults to current repo owner)'
+    required: false
+    default: ${{ github.repository_owner }}
+  repo-name:
+    description: 'Repository name for attestation verification (defaults to current repo name)'
+    required: false
+    default: ${{ github.event.repository.name }}
+
+outputs:
+  verified-count:
+    description: 'Number of artifacts successfully verified'
+    value: ${{ steps.verify.outputs.verified_count }}
+  failed-count:
+    description: 'Number of artifacts that failed verification'
+    value: ${{ steps.verify.outputs.failed_count }}
+  bypassed:
+    description: 'Whether verification was bypassed (true/false)'
+    value: ${{ steps.verify.outputs.bypassed }}
+
+runs:
+  using: 'composite'
+  steps:
+    - name: Validate inputs
+      shell: bash
+      run: |
+        echo "🔐 Attestation Verification Gate"
+        echo "================================="
+        echo ""
+        echo "Configuration:"
+        echo "  Environment: ${{ inputs.environment }}"
+        echo "  Allow Bypass: ${{ inputs.allow-bypass }}"
+        echo "  Artifact Path: ${{ inputs.artifact-path }}"
+        echo "  Repository: ${{ inputs.repo-owner }}/${{ inputs.repo-name }}"
+        echo ""
+
+        # Validate environment
+        if [[ "${{ inputs.environment }}" != "prod" ]] && [[ "${{ inputs.environment }}" != "dev" ]]; then
+          echo "❌ Error: Invalid environment '${{ inputs.environment }}'. Must be 'prod' or 'dev'."
+          exit 1
+        fi
+
+        # Warn if bypass is attempted in prod
+        if [[ "${{ inputs.environment }}" == "prod" ]] && [[ "${{ inputs.allow-bypass }}" == "true" ]]; then
+          echo "⚠️  WARNING: Bypass flag is set but will be IGNORED in production environment."
+          echo "   Production environments ALWAYS require attestation verification."
+          echo ""
+        fi
+
+    - name: Check if bypass is allowed
+      id: check-bypass
+      shell: bash
+      run: |
+        BYPASS="false"
+        
+        if [[ "${{ inputs.environment }}" == "dev" ]] && [[ "${{ inputs.allow-bypass }}" == "true" ]]; then
+          BYPASS="true"
+          echo "⚠️  BYPASS ENABLED"
+          echo "   Attestation verification will be skipped for dev/test environment."
+          echo "   This is NOT allowed in production."
+          echo ""
+        fi
+        
+        echo "bypass=$BYPASS" >> $GITHUB_OUTPUT
+
+    - name: Verify attestations
+      id: verify
+      shell: bash
+      env:
+        GH_TOKEN: ${{ github.token }}
+      run: |
+        BYPASSED="${{ steps.check-bypass.outputs.bypass }}"
+        
+        if [[ "$BYPASSED" == "true" ]]; then
+          echo "✅ Verification bypassed (dev mode with explicit bypass flag)"
+          echo "verified_count=0" >> $GITHUB_OUTPUT
+          echo "failed_count=0" >> $GITHUB_OUTPUT
+          echo "bypassed=true" >> $GITHUB_OUTPUT
+          exit 0
+        fi
+
+        echo "🔍 Verifying artifact attestations..."
+        echo ""
+        echo "This step ensures that:"
+        echo "  ✓ Artifacts originated from trusted CI/CD workflows"
+        echo "  ✓ Artifacts have not been tampered with since generation"
+        echo "  ✓ Complete audit trail exists for artifact provenance"
+        echo ""
+
+        VERIFIED=0
+        FAILED=0
+        TOTAL=0
+
+        # Expand glob pattern and verify each file
+        shopt -s nullglob
+        FILES=(${{ inputs.artifact-path }})
+        
+        if [ ${#FILES[@]} -eq 0 ]; then
+          echo "❌ Error: No files found matching pattern: ${{ inputs.artifact-path }}"
+          echo ""
+          echo "Possible causes:"
+          echo "  • The artifact path pattern is incorrect"
+          echo "  • Artifacts were not downloaded before verification"
+          echo "  • The expected artifacts were not generated"
+          echo ""
+          echo "verified_count=0" >> $GITHUB_OUTPUT
+          echo "failed_count=0" >> $GITHUB_OUTPUT
+          echo "bypassed=false" >> $GITHUB_OUTPUT
+          exit 1
+        fi
+
+        echo "Found ${#FILES[@]} file(s) to verify"
+        echo ""
+
+        for file in "${FILES[@]}"; do
+          TOTAL=$((TOTAL + 1))
+          echo "[$TOTAL/${#FILES[@]}] Verifying: $(basename "$file")"
+          echo "  Path: $file"
+          
+          # Calculate digest for logging
+          if command -v sha256sum &> /dev/null; then
+            DIGEST=$(sha256sum "$file" | awk '{print $1}')
+            echo "  SHA256: $DIGEST"
+          fi
+          
+          # Run attestation verification
+          if gh attestation verify "$file" \
+              --owner "${{ inputs.repo-owner }}" \
+              --repo "${{ inputs.repo-name }}" 2>&1 | tee /tmp/verify-output.txt; then
+            echo "  ✅ Verification succeeded"
+            VERIFIED=$((VERIFIED + 1))
+          else
+            echo "  ❌ Verification FAILED"
+            FAILED=$((FAILED + 1))
+            
+            # Show verification output for debugging
+            echo ""
+            echo "  Verification output:"
+            sed 's/^/    /' /tmp/verify-output.txt
+          fi
+          echo ""
+        done
+
+        echo "verified_count=$VERIFIED" >> $GITHUB_OUTPUT
+        echo "failed_count=$FAILED" >> $GITHUB_OUTPUT
+        echo "bypassed=false" >> $GITHUB_OUTPUT
+
+        echo "=========================================="
+        echo "Verification Summary"
+        echo "=========================================="
+        echo "  Total artifacts: $TOTAL"
+        echo "  ✅ Verified: $VERIFIED"
+        echo "  ❌ Failed: $FAILED"
+        echo ""
+
+        if [ $FAILED -gt 0 ]; then
+          echo "❌ ATTESTATION VERIFICATION FAILED"
+          echo ""
+          echo "One or more artifacts failed attestation verification."
+          echo "This means:"
+          echo "  • No valid attestation was found for the artifact(s), OR"
+          echo "  • The artifact(s) have been modified after attestation, OR"
+          echo "  • The attestation(s) are from an untrusted source"
+          echo ""
+          echo "These artifacts CANNOT be used because they fail the trust boundary contract."
+          echo ""
+          echo "See docs/phase4/attestation-gate.md for more information."
+          echo "See docs/phase3/terraform-boundary.md for trust boundary requirements."
+          exit 1
+        fi
+
+        echo "✅ All artifacts verified successfully"
+        echo "   All ${VERIFIED} artifact(s) have valid attestations and can be trusted."
+
+    - name: Verification result
+      shell: bash
+      if: always()
+      run: |
+        if [[ "${{ steps.verify.outputs.bypassed }}" == "true" ]]; then
+          echo "⚠️  Verification was BYPASSED (dev mode)"
+        elif [[ "${{ steps.verify.outputs.failed_count }}" == "0" ]]; then
+          echo "✅ Attestation verification PASSED"
+          echo "   Verified ${{ steps.verify.outputs.verified_count }} artifact(s)"
+        else
+          echo "❌ Attestation verification FAILED"
+          echo "   Failed: ${{ steps.verify.outputs.failed_count }} artifact(s)"
+        fi
+
+branding:
+  icon: 'shield'
+  color: 'blue'

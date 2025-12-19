@@ -91,46 +91,10 @@ jobs:
           ls -lh artifacts/tfvars/
 
       - name: Verify artifact attestations (REQUIRED)
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          echo "🔐 Verifying SLSA provenance attestations..."
-          echo ""
-          echo "This step ensures that:"
-          echo "  ✓ Artifacts originated from trusted CI/CD workflows"
-          echo "  ✓ Artifacts have not been tampered with since generation"
-          echo "  ✓ Complete audit trail exists for artifact provenance"
-          echo ""
-
-          SITE_FILE="artifacts/tfvars/site-${{ matrix.site }}.tfvars.json"
-
-          if [ ! -f "$SITE_FILE" ]; then
-            echo "❌ Site tfvars file not found: $SITE_FILE"
-            echo "   Available files:"
-            ls -lh artifacts/tfvars/
-            exit 1
-          fi
-
-          echo "Verifying: $SITE_FILE"
-
-          if ! gh attestation verify "$SITE_FILE" \
-              --owner ${{ github.repository_owner }} \
-              --repo $(echo ${{ github.repository }} | cut -d'/' -f2); then
-            echo ""
-            echo "❌ Attestation verification FAILED"
-            echo ""
-            echo "This artifact cannot be used with Terraform because:"
-            echo "  • No valid attestation was found, OR"
-            echo "  • The artifact has been modified after attestation, OR"
-            echo "  • The attestation is from an untrusted source"
-            echo ""
-            echo "See docs/phase3/terraform-boundary.md for trust boundary requirements."
-            exit 1
-          fi
-
-          echo ""
-          echo "✅ Attestation verified successfully"
-          echo "   This artifact is trusted and can be used by Terraform."
+        uses: ./.github/actions/verify-attestation
+        with:
+          artifact-path: 'artifacts/tfvars/site-${{ matrix.site }}.tfvars.json'
+          environment: 'prod'
 
       - name: Set up Terraform
         uses: hashicorp/setup-terraform@v3
@@ -316,6 +280,9 @@ jobs:
           - ✅ Only attested artifacts are consumed
           - ✅ Attestation verification is required (not optional)
           - ✅ Verification failures block the workflow
+          - ✅ Uses reusable attestation gate action (`.github/actions/verify-attestation`)
+
+          See [docs/phase4/attestation-gate.md](docs/phase4/attestation-gate.md) for gate documentation.
 
           ## Provider Configuration
 
