@@ -414,7 +414,7 @@ This table summarizes all drift scenarios, their enforcement actions, and whethe
 | **NetBox ↔ Artifact** | Schema validation failure | 🔴 Critical | ❌ Abort pipeline immediately | ✅ Yes |
 | **NetBox ↔ Artifact** | Orphaned resources (e.g., VLAN with no site) | 🟡 Warning | ⚠️ Warn and flag for review | ✅ Yes |
 | **NetBox ↔ Artifact** | API timeout or transient error | 🟡 Warning | 🔄 Retry with backoff | ✅ Yes |
-| **NetBox ↔ Artifact** | Concurrent NetBox modification detected | 🔴 Critical | ⚠️ Manual investigation required | ⚠️ Partial (detection only) |
+| **NetBox ↔ Artifact** | Concurrent NetBox modification detected | 🟡 Warning | ⚠️ Manual investigation required | ⚠️ Partial (detection only) |
 | **Artifact ↔ Terraform Plan** | New resources to create | 🟢 Normal | ✅ Review and approve | ✅ Yes |
 | **Artifact ↔ Terraform Plan** | Existing resources to update | 🟢 Normal | ✅ Review and approve | ✅ Yes |
 | **Artifact ↔ Terraform Plan** | Resources to delete | 🟡 Warning | ⚠️ Enhanced review required | ✅ Yes |
