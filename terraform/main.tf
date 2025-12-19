@@ -24,8 +24,10 @@ provider "unifi" {
 # Site Configuration
 # Site details are loaded from the tfvars file
 locals {
-  site_name = var.site_name
-  site_slug = var.site_slug
+  site_name        = var.site_name
+  site_slug        = var.site_slug
+  site_description = var.site_description
+  tags             = var.tags
 }
 
 # UniFi Network Resources
@@ -69,6 +71,16 @@ output "site_name" {
 output "site_slug" {
   description = "Slug identifier for the site"
   value       = local.site_slug
+}
+
+output "site_description" {
+  description = "Description of the site"
+  value       = local.site_description
+}
+
+output "tags" {
+  description = "Tags from NetBox for organizing resources"
+  value       = local.tags
 }
 
 output "configured_vlans" {
