@@ -89,7 +89,7 @@ The action provides outputs you can use in subsequent steps:
 
 **Problem**: The glob pattern didn't match any files.
 
-**Solution**: 
+**Solution**:
 1. Check the pattern is correct
 2. Verify artifacts were downloaded before this step
 3. Use `ls -la artifacts/` to debug
