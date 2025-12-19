@@ -11,7 +11,9 @@ from collections import defaultdict
 
 def main():
     if len(sys.argv) < 3:
-        print("Usage: generate-plan-diff.py <json_plan_file> <site_name>")
+        print(
+            "Usage: python3 scripts/generate-plan-diff.py <json_plan_file> <site_name>"
+        )
         sys.exit(1)
 
     json_file = sys.argv[1]

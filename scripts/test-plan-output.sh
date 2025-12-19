@@ -110,6 +110,7 @@ sample_plan = {
 }
 
 # Write to temp file
+temp_file = None
 with tempfile.NamedTemporaryFile(mode='w', suffix='.json', delete=False) as f:
     json.dump(sample_plan, f)
     temp_file = f.name
@@ -134,7 +135,8 @@ try:
         print(f"❌ Diff generator failed: {result.stderr}")
         exit(1)
 finally:
-    os.unlink(temp_file)
+    if temp_file and os.path.exists(temp_file):
+        os.unlink(temp_file)
 PYEOF
 
 if [ $? -eq 0 ]; then
