@@ -315,25 +315,25 @@ This JSON Schema provides formal validation rules for Terraform input artifacts:
 ```
 artifacts/
 └── tfvars/
-    ├── site-{slug}.tfvars.json
-    └── site-{slug}.tfvars.json
+    ├── site-pennington.tfvars.json
+    └── site-countfleetcourt.tfvars.json
 ```
 
 ### Naming Convention
 
-- **Pattern**: `site-{slug}.tfvars.json`
-- **{slug}**: The value from the `site_slug` field
+- **Pattern**: `{site_slug}.tfvars.json`
+- **{site_slug}**: The exact value from the `site_slug` field (typically includes `site-` prefix)
 - **Extension**: MUST be `.tfvars.json` (not `.json` or `.tfvars`)
 
 ### Examples
 
-| Site Slug | Artifact Path |
-|-----------|---------------|
-| `pennington` | `artifacts/tfvars/site-pennington.tfvars.json` |
-| `countfleetcourt` | `artifacts/tfvars/site-countfleetcourt.tfvars.json` |
-| `site-production` | `artifacts/tfvars/site-site-production.tfvars.json` ⚠️ |
+| Site Slug Value (`site_slug` field) | Artifact Filename |
+|-------------------------------------|-------------------|
+| `site-pennington` | `site-pennington.tfvars.json` |
+| `site-countfleetcourt` | `site-countfleetcourt.tfvars.json` |
+| `site-production` | `site-production.tfvars.json` |
 
-⚠️ **Note**: If `site_slug` already contains the `site-` prefix, it will be duplicated in the filename. This is intentional to maintain consistency. The render pipeline handles this automatically.
+**Note**: The `site_slug` field value is used as-is for the filename. In this repository, site slugs follow the convention `site-{location}` by convention, but the filename pattern itself is simply `{site_slug}.tfvars.json`.
 
 ## Validation Requirements
 
