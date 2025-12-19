@@ -32,22 +32,17 @@ jobs:
   terraform-plan:
     runs-on: ubuntu-latest
     # Only run if render artifacts succeeded or on manual dispatch
+    # Skip matrix items if a specific site was requested
     if: |
-      github.event_name == 'workflow_dispatch' ||
-      github.event.workflow_run.conclusion == 'success'
-    
+      (github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success') &&
+      (github.event_name != 'workflow_dispatch' || github.event.inputs.site == '' || github.event.inputs.site == matrix.site)
+
     strategy:
       matrix:
         # Define sites - this could be dynamically generated in the future
         site: [pennington, countfleetcourt]
       fail-fast: false
-    
-    # Skip sites if a specific site was requested
-    if: |
-      github.event_name != 'workflow_dispatch' ||
-      github.event.inputs.site == '' ||
-      github.event.inputs.site == matrix.site
-    
+
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -65,7 +60,7 @@ jobs:
             RUN_ID="${{ github.event.workflow_run.id }}"
             echo "Using triggering workflow run ID: $RUN_ID"
           fi
-          
+
           echo "run_id=$RUN_ID" >> $GITHUB_OUTPUT
           echo "✅ Will use artifacts from run: $RUN_ID"
 
@@ -74,12 +69,12 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           RUN_ID="${{ steps.determine-run.outputs.run_id }}"
-          
+
           echo "📦 Downloading terraform-tfvars artifacts from run $RUN_ID..."
-          
+
           # Create directory for artifacts
           mkdir -p artifacts/tfvars
-          
+
           # Download terraform-tfvars artifact bundle
           if ! gh run download "$RUN_ID" --name terraform-tfvars --dir artifacts/tfvars; then
             echo "❌ Failed to download terraform-tfvars artifact"
@@ -89,7 +84,7 @@ jobs:
             echo "   - The workflow run ID is invalid"
             exit 1
           fi
-          
+
           echo "✅ Artifacts downloaded successfully"
           echo ""
           echo "Downloaded tfvars files:"
@@ -106,18 +101,18 @@ jobs:
           echo "  ✓ Artifacts have not been tampered with since generation"
           echo "  ✓ Complete audit trail exists for artifact provenance"
           echo ""
-          
+
           SITE_FILE="artifacts/tfvars/site-${{ matrix.site }}.tfvars.json"
-          
+
           if [ ! -f "$SITE_FILE" ]; then
             echo "❌ Site tfvars file not found: $SITE_FILE"
             echo "   Available files:"
             ls -lh artifacts/tfvars/
             exit 1
           fi
-          
+
           echo "Verifying: $SITE_FILE"
-          
+
           if ! gh attestation verify "$SITE_FILE" \
               --owner ${{ github.repository_owner }} \
               --repo $(echo ${{ github.repository }} | cut -d'/' -f2); then
@@ -132,7 +127,7 @@ jobs:
             echo "See docs/phase3/terraform-boundary.md for trust boundary requirements."
             exit 1
           fi
-          
+
           echo ""
           echo "✅ Attestation verified successfully"
           echo "   This artifact is trusted and can be used by Terraform."
@@ -150,26 +145,26 @@ jobs:
           echo ""
           echo "Note: Provider credentials are stubbed for schema validation."
           echo "Actual provider operations would require real credentials."
-          
+
           # Export stub credentials
           export TF_VAR_unifi_username="stub"
           export TF_VAR_unifi_password="stub"
           export TF_VAR_unifi_api_url="https://stub.local:8443"
           export TF_VAR_unifi_allow_insecure="true"
-          
+
           # Make them available to subsequent steps
           echo "TF_VAR_unifi_username=stub" >> $GITHUB_ENV
           echo "TF_VAR_unifi_password=stub" >> $GITHUB_ENV
           echo "TF_VAR_unifi_api_url=https://stub.local:8443" >> $GITHUB_ENV
           echo "TF_VAR_unifi_allow_insecure=true" >> $GITHUB_ENV
-          
+
           echo "✅ Provider configuration set"
 
       - name: Terraform Init
         working-directory: terraform
         run: |
           echo "🚀 Initializing Terraform..."
-          
+
           if ! terraform init -input=false; then
             echo "❌ Terraform init failed"
             echo "   This may indicate:"
@@ -178,7 +173,7 @@ jobs:
             echo "   - Backend configuration errors"
             exit 1
           fi
-          
+
           echo "✅ Terraform initialized successfully"
           echo ""
           echo "Installed providers:"
@@ -189,13 +184,13 @@ jobs:
         working-directory: terraform
         run: |
           echo "✅ Validating Terraform configuration..."
-          
+
           if ! terraform validate; then
             echo "❌ Terraform validation failed"
             echo "   This indicates a configuration or schema error."
             exit 1
           fi
-          
+
           echo "✅ Configuration is valid"
 
       - name: Terraform Plan (Binary)
@@ -205,12 +200,12 @@ jobs:
         run: |
           TFVARS_FILE="../artifacts/tfvars/site-${{ matrix.site }}.tfvars.json"
           PLAN_FILE="tfplan-${{ matrix.site }}.binary"
-          
+
           echo "📋 Running Terraform plan for site: ${{ matrix.site }}"
           echo "   Using tfvars: $TFVARS_FILE"
           echo "   Output plan: $PLAN_FILE"
           echo ""
-          
+
           # Run plan and save binary output
           # Note: This may fail if provider requires actual connectivity
           # That's expected in stub mode - we still want to test schema validation
@@ -233,10 +228,10 @@ jobs:
               echo "   Schema validation has already passed in the validate step."
             fi
           fi
-          
+
           echo "plan_status=$PLAN_STATUS" >> $GITHUB_OUTPUT
           echo "plan_exit_code=$PLAN_EXIT_CODE" >> $GITHUB_OUTPUT
-          
+
           # Consider it a success if we got this far with schema validation
           exit 0
 
@@ -246,13 +241,13 @@ jobs:
         run: |
           PLAN_FILE="tfplan-${{ matrix.site }}.binary"
           JSON_FILE="tfplan-${{ matrix.site }}.json"
-          
+
           echo "📄 Generating JSON representation of plan..."
-          
+
           if [ -f "$PLAN_FILE" ]; then
             terraform show -json "$PLAN_FILE" > "$JSON_FILE"
             echo "✅ JSON plan generated: $JSON_FILE"
-            
+
             # Show summary
             echo ""
             echo "Plan summary:"
@@ -276,28 +271,28 @@ jobs:
         run: |
           cat >> $GITHUB_STEP_SUMMARY << 'EOF'
           ## Terraform Plan: ${{ matrix.site }}
-          
+
           **Status**: ${{ steps.plan.outputs.plan_status || 'unknown' }}
           **Exit Code**: ${{ steps.plan.outputs.plan_exit_code || 'N/A' }}
-          
+
           ### Artifacts Used
           - **Render Run**: [${{ steps.determine-run.outputs.run_id }}](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ steps.determine-run.outputs.run_id }})
           - **tfvars File**: `site-${{ matrix.site }}.tfvars.json`
           - **Attestation**: ✅ Verified
-          
+
           ### Plan Output
           - Binary plan: `tfplan-${{ matrix.site }}.binary`
           - JSON plan: `tfplan-${{ matrix.site }}.json`
-          
+
           ### Schema Validation
           - ✅ Provider schema validated
           - ✅ Configuration syntax valid
           - ✅ Variable definitions match
-          
+
           ### Notes
           This plan was generated in stub mode without actual UniFi controller access.
           For actual deployment, real credentials and connectivity would be required.
-          
+
           See [terraform/README.md](terraform/README.md) for configuration details.
           EOF
 
@@ -310,36 +305,36 @@ jobs:
         run: |
           cat >> $GITHUB_STEP_SUMMARY << 'EOF'
           # Terraform Plan Workflow Complete
-          
+
           ## What This Workflow Does
-          
+
           This workflow demonstrates the complete Terraform plan pipeline:
-          
+
           1. ✅ **Download Attested Artifacts** - Retrieves tfvars from render pipeline
           2. ✅ **Verify Attestations** - Ensures artifacts have valid SLSA provenance
           3. ✅ **Provider Schema Validation** - Validates against UniFi provider schema
           4. ✅ **Generate Plan** - Creates both binary and JSON plan outputs
           5. ✅ **Fail on Errors** - Exits with error on schema mismatch or config errors
-          
+
           ## Trust Boundary Compliance
-          
+
           This workflow enforces the trust boundary contract:
           - ✅ Only attested artifacts are consumed
           - ✅ Attestation verification is required (not optional)
           - ✅ Verification failures block the workflow
-          
+
           ## Provider Configuration
-          
+
           - **Provider**: UniFi (paultyng/unifi)
           - **Mode**: Stub credentials for schema validation
           - **Decoupling**: Provider config separated from artifact generation
-          
+
           ## Next Steps
-          
+
           To use these plans for actual deployment:
           1. Review the plan JSON outputs
           2. Configure real UniFi controller credentials
           3. Run terraform apply with the binary plan file
-          
+
           See [docs/phase3/terraform-boundary.md](docs/phase3/terraform-boundary.md) for complete details.
           EOF
