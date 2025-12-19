@@ -214,6 +214,32 @@ jobs:
             echo "⚠️  Binary plan file not found, skipping JSON generation"
           fi
 
+      - name: Generate Structured Plan Diff
+        if: steps.plan.outputs.plan_status != 'failed'
+        working-directory: terraform
+        run: |
+          JSON_FILE="tfplan-${{ matrix.site }}.json"
+          DIFF_FILE="tfplan-${{ matrix.site }}-diff.md"
+
+          if [ ! -f "$JSON_FILE" ]; then
+            echo "No JSON plan file found, skipping diff generation"
+            exit 0
+          fi
+
+          echo "📊 Generating structured diff summary..."
+
+          # Use the Python script to generate the diff
+          python3 ../scripts/generate-plan-diff.py "$JSON_FILE" "${{ matrix.site }}" > "$DIFF_FILE"
+
+          if [ $? -eq 0 ]; then
+            echo "✅ Structured diff generated: $DIFF_FILE"
+            echo ""
+            echo "Diff preview:"
+            head -30 "$DIFF_FILE"
+          else
+            echo "⚠️  Failed to generate structured diff"
+          fi
+
       - name: Upload Terraform Plans
         uses: actions/upload-artifact@v4
         if: always()
@@ -222,11 +248,14 @@ jobs:
           path: |
             terraform/tfplan-${{ matrix.site }}.binary
             terraform/tfplan-${{ matrix.site }}.json
+            terraform/tfplan-${{ matrix.site }}-diff.md
           retention-days: 30
 
       - name: Plan Summary
         if: always()
         run: |
+          DIFF_FILE="terraform/tfplan-${{ matrix.site }}-diff.md"
+
           cat >> $GITHUB_STEP_SUMMARY << 'EOF'
           ## Terraform Plan: ${{ matrix.site }}
 
@@ -241,6 +270,20 @@ jobs:
           ### Plan Output
           - Binary plan: `tfplan-${{ matrix.site }}.binary`
           - JSON plan: `tfplan-${{ matrix.site }}.json`
+          - Structured diff: `tfplan-${{ matrix.site }}-diff.md`
+
+          EOF
+
+          # Append structured diff if available
+          if [ -f "$DIFF_FILE" ]; then
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "---" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            cat "$DIFF_FILE" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+          fi
+
+          cat >> $GITHUB_STEP_SUMMARY << 'EOF'
 
           ### Schema Validation
           - ✅ Provider schema validated
