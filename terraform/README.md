@@ -15,7 +15,7 @@ This directory contains Terraform configurations for managing UniFi network infr
 
 1. **Attested Artifacts**: Terraform must only consume artifacts with valid SLSA provenance attestations. See [../docs/phase3/terraform-boundary.md](../docs/phase3/terraform-boundary.md)
 
-2. **UniFi Controller Access**: 
+2. **UniFi Controller Access**:
    - UniFi controller URL
    - Admin credentials (username and password)
    - Network connectivity to the controller
