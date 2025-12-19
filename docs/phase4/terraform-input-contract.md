@@ -205,8 +205,8 @@ This JSON Schema provides formal validation rules for Terraform input artifacts:
         "properties": {
           "cidr": {
             "type": "string",
-            "pattern": "^([0-9]{1,3}\\.){3}[0-9]{1,3}/[0-9]{1,2}$",
-            "description": "IP prefix in CIDR notation",
+            "pattern": "^(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\\.(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\\.(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\\.(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)/(3[0-2]|[12]?[0-9])$",
+            "description": "IP prefix in CIDR notation (validates octets 0-255 and prefix length 0-32)",
             "example": "192.168.10.0/24"
           },
           "vlan_id": {
@@ -322,8 +322,10 @@ artifacts/
 ### Naming Convention
 
 - **Pattern**: `{site_slug}.tfvars.json`
-- **{site_slug}**: The exact value from the `site_slug` field (typically includes `site-` prefix)
+- **{site_slug}**: The exact value from the `site_slug` field
 - **Extension**: MUST be `.tfvars.json` (not `.json` or `.tfvars`)
+
+**Repository Convention**: In this repository, `site_slug` values follow the naming pattern `site-{location}` (e.g., `site-pennington`, `site-countfleetcourt`). This is a data convention, not a filename transformation rule.
 
 ### Examples
 
@@ -333,7 +335,7 @@ artifacts/
 | `site-countfleetcourt` | `site-countfleetcourt.tfvars.json` |
 | `site-production` | `site-production.tfvars.json` |
 
-**Note**: The `site_slug` field value is used as-is for the filename. In this repository, site slugs follow the convention `site-{location}` by convention, but the filename pattern itself is simply `{site_slug}.tfvars.json`.
+**Note**: The `site_slug` field value is used as-is for the filename without modification.
 
 ## Validation Requirements
 
@@ -476,9 +478,9 @@ number required.
 }
 ```
 
-**Expected Error**: May not fail at plan stage but will fail during validation or apply when CIDR is parsed.
+**Expected Error**: This artifact violates the JSON schema (CIDR must include prefix length). If using schema validation, this would be rejected. If not caught by schema validation, Terraform provider will likely fail during plan/apply when attempting to parse the invalid CIDR.
 
-**Result**: ⚠️ Consider adding CIDR validation in future versions
+**Result**: ⚠️ Schema validation will catch this (pattern mismatch). If schema validation is not enforced, Terraform provider errors will occur during plan/apply.
 
 ## Contract Enforcement in Workflows
 
