@@ -146,13 +146,7 @@ jobs:
           echo "Note: Provider credentials are stubbed for schema validation."
           echo "Actual provider operations would require real credentials."
 
-          # Export stub credentials
-          export TF_VAR_unifi_username="stub"
-          export TF_VAR_unifi_password="stub"
-          export TF_VAR_unifi_api_url="https://stub.local:8443"
-          export TF_VAR_unifi_allow_insecure="true"
-
-          # Make them available to subsequent steps
+          # Make credentials available to subsequent steps
           echo "TF_VAR_unifi_username=stub" >> $GITHUB_ENV
           echo "TF_VAR_unifi_password=stub" >> $GITHUB_ENV
           echo "TF_VAR_unifi_api_url=https://stub.local:8443" >> $GITHUB_ENV

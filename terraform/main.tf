@@ -1,14 +1,6 @@
 # Main Terraform configuration for UniFi infrastructure management
 # This configuration uses site-specific tfvars files generated from NetBox exports
 
-terraform {
-  # Backend configuration - using local backend for now
-  # In production, this would use a remote backend like S3 or Terraform Cloud
-  backend "local" {
-    path = "terraform.tfstate"
-  }
-}
-
 # UniFi Provider Configuration
 # The provider is configured via environment variables or stub values
 # This allows the configuration to be decoupled from artifact generation
@@ -46,12 +38,17 @@ resource "unifi_network" "vlans" {
   name    = each.value.name
   purpose = "corporate"
 
-  subnet       = lookup(local.vlan_subnets, each.key, null)
+  subnet       = local.vlan_subnets[each.key]
   vlan_id      = each.value.vlan_id
   dhcp_enabled = true
 
-  # Use prefix CIDR if available for this VLAN
-  # Otherwise, this will need to be configured manually
+  # Validation: Fail if no subnet is configured for this VLAN
+  lifecycle {
+    precondition {
+      condition     = contains(keys(local.vlan_subnets), each.key)
+      error_message = "No subnet prefix found for VLAN ${each.key}. Each VLAN must have a corresponding network prefix."
+    }
+  }
 }
 
 # Map VLANs to their subnet CIDRs from prefixes
