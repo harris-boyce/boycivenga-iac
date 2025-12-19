@@ -489,18 +489,18 @@ gh attestation verify site-pennington.tfvars.json \
 
 ### What Phase 3 Accomplishes
 
-✅ **Artifact Provenance**: Cryptographic proof of artifact origin  
-✅ **Integrity Protection**: Tamper detection via SHA-256 digests  
-✅ **Audit Trail**: Complete record of artifact generation  
-✅ **Supply Chain Security**: SLSA Level 2 attestation  
+✅ **Artifact Provenance**: Cryptographic proof of artifact origin
+✅ **Integrity Protection**: Tamper detection via SHA-256 digests
+✅ **Audit Trail**: Complete record of artifact generation
+✅ **Supply Chain Security**: SLSA Level 2 attestation
 ✅ **Trust Boundary Definition**: Clear boundaries between trusted and untrusted components
 
 ### What Phase 3 Does Not Cover
 
-❌ **Runtime Authorization**: No enforcement of who can deploy artifacts  
-❌ **Policy Enforcement**: No automatic validation of artifact content  
-❌ **NetBox Security**: Data quality and access control managed externally  
-❌ **Deployment Security**: Terraform/UniFi operations are unverified  
+❌ **Runtime Authorization**: No enforcement of who can deploy artifacts
+❌ **Policy Enforcement**: No automatic validation of artifact content
+❌ **NetBox Security**: Data quality and access control managed externally
+❌ **Deployment Security**: Terraform/UniFi operations are unverified
 ❌ **Configuration Drift**: No detection of manual infrastructure changes
 
 ### Key Takeaways
