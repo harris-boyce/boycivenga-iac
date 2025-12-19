@@ -1,0 +1,50 @@
+# Stub/Example Terraform Configuration
+# This file provides example values for local testing and CI validation
+# It is NOT used for production deployments
+
+# Site information
+site_name        = "example-site"
+site_slug        = "example-site"
+site_description = "Example site for testing Terraform configuration"
+
+# Example VLANs
+vlans = [
+  {
+    vlan_id     = 10
+    name        = "Default VLAN"
+    description = "Default network VLAN"
+    status      = "active"
+  },
+  {
+    vlan_id     = 20
+    name        = "Guest VLAN"
+    description = "Guest network VLAN"
+    status      = "active"
+  }
+]
+
+# Example network prefixes
+prefixes = [
+  {
+    cidr        = "192.168.10.0/24"
+    vlan_id     = 10
+    description = "Default network range"
+    status      = "active"
+  },
+  {
+    cidr        = "192.168.20.0/24"
+    vlan_id     = 20
+    description = "Guest network range"
+    status      = "active"
+  }
+]
+
+# Example tags
+tags = [
+  {
+    name        = "managed"
+    slug        = "managed"
+    description = "Managed by Terraform"
+    color       = "9e9e9e"
+  }
+]
