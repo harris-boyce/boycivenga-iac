@@ -545,17 +545,22 @@ This table summarizes all drift scenarios, their enforcement actions, and whethe
 - name: Terraform Plan
   id: plan
   run: |
+    set +e
     terraform plan \
       -var-file="../artifacts/tfvars/site-pennington.tfvars.json" \
       -out=tfplan-pennington.binary \
       -detailed-exitcode
+    PLAN_EXIT_CODE=$?
+    echo "exit_code=$PLAN_EXIT_CODE" >> $GITHUB_OUTPUT
+    exit $PLAN_EXIT_CODE
   continue-on-error: true
 
 - name: Detect Drift
   run: |
-    if [ "${{ steps.plan.outcome }}" == "success" ] && [ "${{ steps.plan.outputs.exitcode }}" == "2" ]; then
+    PLAN_EXIT=${{ steps.plan.outputs.exit_code }}
+    if [ "$PLAN_EXIT" == "2" ]; then
       echo "✓ Drift detected - review required"
-    elif [ "${{ steps.plan.outcome }}" == "success" ] && [ "${{ steps.plan.outputs.exitcode }}" == "0" ]; then
+    elif [ "$PLAN_EXIT" == "0" ]; then
       echo "✓ No drift - infrastructure matches desired state"
     else
       echo "✗ Terraform plan failed"
