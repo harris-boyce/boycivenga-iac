@@ -51,3 +51,22 @@ jobs:
 
       - name: Lint Python with flake8
         run: flake8 --max-line-length=88 --extend-ignore=E203,W503 .
+
+  test-plan-output:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.x'
+
+      - name: Install jq
+        run: sudo apt-get update && sudo apt-get install -y jq
+
+      - name: Test plan output structure
+        run: ./scripts/test-plan-output.sh
