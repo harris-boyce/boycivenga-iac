@@ -21,7 +21,6 @@ inputs:
   repo-name:
     description: 'Repository name for attestation verification (defaults to current repo name)'
     required: false
-    default: ${{ github.event.repository.name }}
 
 outputs:
   verified-count:
@@ -43,11 +42,21 @@ runs:
         echo "🔐 Attestation Verification Gate"
         echo "================================="
         echo ""
+
+        # Derive repository name if not provided
+        REPO_OWNER="${{ inputs.repo-owner }}"
+        REPO_NAME="${{ inputs.repo-name }}"
+        if [[ -z "$REPO_NAME" ]]; then
+          REPO_NAME=$(echo "${{ github.repository }}" | cut -d'/' -f2)
+        fi
+        echo "REPO_OWNER=$REPO_OWNER" >> $GITHUB_ENV
+        echo "REPO_NAME=$REPO_NAME" >> $GITHUB_ENV
+
         echo "Configuration:"
         echo "  Environment: ${{ inputs.environment }}"
         echo "  Allow Bypass: ${{ inputs.allow-bypass }}"
         echo "  Artifact Path: ${{ inputs.artifact-path }}"
-        echo "  Repository: ${{ inputs.repo-owner }}/${{ inputs.repo-name }}"
+        echo "  Repository: $REPO_OWNER/$REPO_NAME"
         echo ""
 
         # Validate environment
@@ -139,10 +148,14 @@ runs:
             echo "  SHA256: $DIGEST"
           fi
 
+          # Create unique temporary file for this verification
+          TEMP_OUTPUT=$(mktemp)
+          trap "rm -f $TEMP_OUTPUT" EXIT
+
           # Run attestation verification
           if gh attestation verify "$file" \
-              --owner "${{ inputs.repo-owner }}" \
-              --repo "${{ inputs.repo-name }}" 2>&1 | tee /tmp/verify-output.txt; then
+              --owner "$REPO_OWNER" \
+              --repo "$REPO_NAME" 2>&1 | tee "$TEMP_OUTPUT"; then
             echo "  ✅ Verification succeeded"
             VERIFIED=$((VERIFIED + 1))
           else
@@ -152,8 +165,9 @@ runs:
             # Show verification output for debugging
             echo ""
             echo "  Verification output:"
-            sed 's/^/    /' /tmp/verify-output.txt
+            sed 's/^/    /' "$TEMP_OUTPUT"
           fi
+          rm -f "$TEMP_OUTPUT"
           echo ""
         done
 

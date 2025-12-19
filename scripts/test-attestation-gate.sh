@@ -24,7 +24,7 @@ assert 'runs' in action, 'Missing runs field'
 
 # Check required inputs
 assert 'artifact-path' in action['inputs'], 'Missing artifact-path input'
-assert action['inputs']['artifact-path']['required'] == True, 'artifact-path should be required'
+assert action['inputs']['artifact-path']['required'] is True, 'artifact-path should be required'
 
 # Check environment input has correct default
 assert action['inputs']['environment']['default'] == 'prod', 'environment default should be prod'
@@ -93,7 +93,7 @@ for i, step in enumerate(action['runs']['steps']):
             script = script.replace(' }}', '}')
             f.write(script)
             temp_path = f.name
-        
+
         # Basic bash syntax check
         result = subprocess.run(['bash', '-n', temp_path], capture_output=True)
         if result.returncode != 0:
