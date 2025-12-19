@@ -68,7 +68,7 @@ runs:
       shell: bash
       run: |
         BYPASS="false"
-        
+
         if [[ "${{ inputs.environment }}" == "dev" ]] && [[ "${{ inputs.allow-bypass }}" == "true" ]]; then
           BYPASS="true"
           echo "⚠️  BYPASS ENABLED"
@@ -76,7 +76,7 @@ runs:
           echo "   This is NOT allowed in production."
           echo ""
         fi
-        
+
         echo "bypass=$BYPASS" >> $GITHUB_OUTPUT
 
     - name: Verify attestations
@@ -86,7 +86,7 @@ runs:
         GH_TOKEN: ${{ github.token }}
       run: |
         BYPASSED="${{ steps.check-bypass.outputs.bypass }}"
-        
+
         if [[ "$BYPASSED" == "true" ]]; then
           echo "✅ Verification bypassed (dev mode with explicit bypass flag)"
           echo "verified_count=0" >> $GITHUB_OUTPUT
@@ -110,7 +110,7 @@ runs:
         # Expand glob pattern and verify each file
         shopt -s nullglob
         FILES=(${{ inputs.artifact-path }})
-        
+
         if [ ${#FILES[@]} -eq 0 ]; then
           echo "❌ Error: No files found matching pattern: ${{ inputs.artifact-path }}"
           echo ""
@@ -132,13 +132,13 @@ runs:
           TOTAL=$((TOTAL + 1))
           echo "[$TOTAL/${#FILES[@]}] Verifying: $(basename "$file")"
           echo "  Path: $file"
-          
+
           # Calculate digest for logging
           if command -v sha256sum &> /dev/null; then
             DIGEST=$(sha256sum "$file" | awk '{print $1}')
             echo "  SHA256: $DIGEST"
           fi
-          
+
           # Run attestation verification
           if gh attestation verify "$file" \
               --owner "${{ inputs.repo-owner }}" \
@@ -148,7 +148,7 @@ runs:
           else
             echo "  ❌ Verification FAILED"
             FAILED=$((FAILED + 1))
-            
+
             # Show verification output for debugging
             echo ""
             echo "  Verification output:"
