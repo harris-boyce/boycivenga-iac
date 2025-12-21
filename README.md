@@ -1,6 +1,48 @@
 # boycivenga-iac
 Terraform repository for managing all things home networking, lab, smart home automations, etc.
 
+## ⚠️ Security & Authority Boundaries
+
+**IMPORTANT: Read this before contributing or using this repository.**
+
+This repository has explicit security and authority boundaries that MUST be respected:
+
+### 🎯 Authority Boundary
+
+**NetBox is the SOLE authoritative source of infrastructure intent. Terraform is NOT an authority.**
+
+- ✅ All infrastructure definitions MUST originate from NetBox
+- ❌ DO NOT define infrastructure intent directly in Terraform
+- ❌ DO NOT create manual variable files outside the render pipeline
+
+### 🔒 Execution Boundary
+
+**Only GitHub Actions may execute Terraform plan operations. Manual execution is PROHIBITED.**
+
+- ✅ All Terraform operations MUST run in GitHub Actions workflows
+- ❌ DO NOT run `terraform plan` or `terraform apply` locally
+- ❌ DO NOT use alternative CI/CD systems
+
+### 🛡️ Security Boundary
+
+**All artifacts MUST be attested with SLSA provenance. Unattested artifacts are rejected.**
+
+- ✅ Only attested artifacts from the render pipeline may be consumed
+- ❌ DO NOT create, edit, or modify artifacts manually
+- ❌ DO NOT bypass attestation verification in production
+
+**📖 Complete Documentation**: See [docs/phase4/security.md](docs/phase4/security.md) for comprehensive security and authority boundaries.
+
+### Contributor Checklist
+
+Before contributing, verify you understand:
+
+- [ ] NetBox is authoritative for intent; Terraform is for implementation only
+- [ ] GitHub Actions is the only permitted execution environment
+- [ ] Attestation verification is mandatory and cannot be bypassed in production
+- [ ] Manual artifacts and local Terraform execution are prohibited
+- [ ] All boundaries are documented in [docs/phase4/security.md](docs/phase4/security.md)
+
 ## Repository Layout
 
 This repository is organized into the following top-level directories:

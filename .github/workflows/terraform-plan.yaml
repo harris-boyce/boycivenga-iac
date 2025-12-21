@@ -1,5 +1,29 @@
 name: Terraform Plan
 
+# ============================================================================
+# SECURITY & AUTHORITY BOUNDARIES
+# ============================================================================
+#
+# This workflow enforces critical security and authority boundaries:
+#
+# 1. EXECUTION BOUNDARY:
+#    - This workflow is the ONLY permitted way to execute Terraform plan
+#    - Manual/local execution of Terraform is PROHIBITED
+#    - No alternative CI/CD systems are permitted
+#
+# 2. AUTHORITY BOUNDARY:
+#    - NetBox is the authoritative source of infrastructure intent
+#    - Terraform is an implementation tool, NOT an authority
+#    - All infrastructure definitions MUST come from NetBox via render pipeline
+#
+# 3. SECURITY BOUNDARY:
+#    - All artifacts MUST have valid SLSA provenance attestations
+#    - Attestation verification is MANDATORY (enforced by verify-attestation action)
+#    - Unattested or modified artifacts are automatically rejected
+#
+# See: docs/phase4/security.md for complete boundary documentation
+# ============================================================================
+
 on:
   # Allow manual triggering with specific artifact run
   workflow_dispatch:
@@ -91,6 +115,12 @@ jobs:
           ls -lh artifacts/tfvars/
 
       - name: Verify artifact attestations (REQUIRED)
+        # SECURITY BOUNDARY ENFORCEMENT:
+        # This step is MANDATORY and enforces the trust boundary contract.
+        # - All artifacts MUST have valid SLSA provenance attestations
+        # - Verification failures BLOCK the workflow (fail-closed security)
+        # - This step CANNOT be bypassed in production environment
+        # - See: docs/phase4/attestation-gate.md for complete documentation
         uses: ./.github/actions/verify-attestation
         with:
           artifact-path: 'artifacts/tfvars/site-${{ matrix.site }}.tfvars.json'
