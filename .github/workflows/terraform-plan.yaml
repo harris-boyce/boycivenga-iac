@@ -186,6 +186,7 @@ jobs:
           ls -lh artifacts/tfvars/
 
       - name: Verify artifact attestations (REQUIRED)
+        id: verify-attestation
         # SECURITY BOUNDARY ENFORCEMENT:
         # This step is MANDATORY and enforces the trust boundary contract.
         # - All artifacts MUST have valid SLSA provenance attestations
@@ -341,6 +342,116 @@ jobs:
             echo "⚠️  Failed to generate structured diff"
           fi
 
+      - name: Evaluate Policy with OPA
+        id: policy
+        if: steps.plan.outputs.plan_status != 'failed'
+        working-directory: terraform
+        run: |
+          PLAN_JSON="tfplan-${{ matrix.site }}.json"
+
+          if [ ! -f "$PLAN_JSON" ]; then
+            echo "⚠️  Plan JSON file not found, skipping policy evaluation"
+            exit 0
+          fi
+
+          echo "🔐 Installing Open Policy Agent..."
+
+          # Download and install OPA (pinned version for reproducibility)
+          OPA_VERSION="0.60.0"
+          OPA_CHECKSUM="7d7cb45d9e6390646e603456503ca1232180604accc646de823e4d2c363dbeb0"
+
+          curl -L -o opa "https://github.com/open-policy-agent/opa/releases/download/v${OPA_VERSION}/opa_linux_amd64_static"
+
+          # Verify checksum for security
+          echo "${OPA_CHECKSUM}  opa" | sha256sum -c - || {
+            echo "❌ OPA checksum verification failed"
+            exit 1
+          }
+
+          chmod +x opa
+
+          echo "✅ OPA installed: $(./opa version)"
+
+          # Prepare policy input document
+          echo "📋 Preparing policy input..."
+
+          # Determine attestation verification status
+          # If verification step succeeded and verified count > 0, then verified = true
+          ATTESTATION_VERIFIED="false"
+          if [ "${{ steps.verify-attestation.outputs.verified-count }}" -gt "0" ]; then
+            ATTESTATION_VERIFIED="true"
+          fi
+
+          # Create metadata JSON
+          cat > policy-input-metadata.json << EOF
+          {
+            "artifact": {
+              "path": "site-${{ matrix.site }}.tfvars.json",
+              "site": "${{ matrix.site }}"
+            },
+            "provenance": {
+              "render_run_id": "${{ steps.determine-run.outputs.run_id }}",
+              "attestation_verified": ${ATTESTATION_VERIFIED},
+              "pr_number": "${{ steps.determine-run.outputs.pr_number || 'unknown' }}",
+              "approver": "${{ steps.pr-metadata.outputs.approver || 'manual' }}",
+              "approved_at": "${{ github.event.review.submitted_at || github.event.head_commit.timestamp }}"
+            },
+            "deletion_approved": false
+          }
+          EOF
+
+          # Create combined input document
+          echo "📄 Creating policy input document..."
+          jq -n \
+            --argjson plan "$(cat "$PLAN_JSON")" \
+            --argjson metadata "$(cat policy-input-metadata.json)" \
+            '{plan: $plan, metadata: $metadata}' > policy-input.json
+
+          # Evaluate policy
+          echo "🔐 Evaluating policy..."
+          echo ""
+
+          # Check if policy allows the plan
+          if ./opa eval \
+              --bundle ../.github/policies/ \
+              --input policy-input.json \
+              --format pretty \
+              'data.terraform.plan.allow' | grep -q "true"; then
+            echo "✅ Policy evaluation PASSED"
+            echo "policy_result=pass" >> $GITHUB_OUTPUT
+
+            # Show summary
+            echo ""
+            echo "Policy summary:"
+            ./opa eval \
+              --bundle ../.github/policies/ \
+              --input policy-input.json \
+              --format pretty \
+              'data.terraform.plan.summary'
+          else
+            echo "❌ Policy evaluation FAILED"
+            echo "policy_result=fail" >> $GITHUB_OUTPUT
+
+            # Show detailed policy violations
+            echo ""
+            echo "Policy denial reasons:"
+            ./opa eval \
+              --bundle ../.github/policies/ \
+              --input policy-input.json \
+              --format pretty \
+              'data.terraform.plan.deny'
+
+            echo ""
+            echo "Detailed violations:"
+            ./opa eval \
+              --bundle ../.github/policies/ \
+              --input policy-input.json \
+              --format pretty \
+              'data.terraform.plan.violations'
+
+            exit 1
+          fi
+
       - name: Upload Terraform Plans
         uses: actions/upload-artifact@v4
         if: always()
@@ -390,6 +501,11 @@ jobs:
           - **Render Run**: [${{ steps.determine-run.outputs.run_id }}](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ steps.determine-run.outputs.run_id }})
           - **tfvars File**: `site-${{ matrix.site }}.tfvars.json`
           - **Attestation**: ✅ Verified
+
+          ### Policy Evaluation
+          - **Policy Engine**: Open Policy Agent (OPA)
+          - **Result**: ${{ steps.policy.outputs.policy_result == 'pass' && '✅ PASSED' || steps.policy.outputs.policy_result == 'fail' && '❌ FAILED' || '⚠️ SKIPPED' }}
+          - **Policies**: Attestation verification, resource change boundaries, destructive change approval
 
           ### Plan Output
           - Binary plan: `tfplan-${{ matrix.site }}.binary`
@@ -448,7 +564,8 @@ jobs:
           3. ✅ **Verify Attestations** - Ensures artifacts have valid SLSA provenance
           4. ✅ **Provider Schema Validation** - Validates against UniFi provider schema
           5. ✅ **Generate Plan** - Creates both binary and JSON plan outputs
-          6. ✅ **Record Traceability** - Links plan to PR approval and artifact source
+          6. ✅ **Policy Evaluation** - OPA evaluates plan against organizational policies
+          7. ✅ **Record Traceability** - Links plan to PR approval and artifact source
 
           ## Trust Boundary Compliance
 
@@ -459,6 +576,16 @@ jobs:
           - ✅ Uses reusable attestation gate action (`.github/actions/verify-attestation`)
 
           See [docs/phase4/attestation-gate.md](docs/phase4/attestation-gate.md) for gate documentation.
+
+          ## Policy Gate
+
+          This workflow includes automated policy evaluation:
+          - ✅ **Policy Engine**: Open Policy Agent (OPA)
+          - ✅ **Deterministic**: Same inputs always produce same outputs
+          - ✅ **CI-Only**: Evaluation only runs in GitHub Actions
+          - ✅ **No Bypass**: Policy failures block the workflow
+
+          See [docs/phase5/policy-engine.md](docs/phase5/policy-engine.md) for policy documentation.
 
           ## Provider Configuration
 
