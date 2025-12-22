@@ -952,7 +952,7 @@ Use this checklist to verify inputs comply with the contract:
 
 ### Related Documentation
 
-- **Policy Engine**: [docs/phase5/policy-engine.md](policy-engine.md) - OPA integration and evaluation
+- **Policy Engine**: [docs/phase5/policy-engine.md](../phase5/policy-engine.md) - OPA integration and evaluation
 - **Terraform Input Contract**: [docs/phase4/terraform-input-contract.md](../phase4/terraform-input-contract.md) - Artifact format specification
 - **Attestation Gate**: [docs/phase4/attestation-gate.md](../phase4/attestation-gate.md) - Artifact verification
 - **Security Boundaries**: [docs/phase4/security.md](../phase4/security.md) - Trust model and boundaries
