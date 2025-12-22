@@ -4,7 +4,7 @@
 
 This document explicitly defines the security boundaries, authority boundaries, and prohibition boundaries for this infrastructure-as-code repository. Understanding these boundaries is critical for maintaining the integrity and security of the infrastructure pipeline.
 
-**Last Updated**: Phase 4  
+**Last Updated**: Phase 4
 **Status**: Active and Enforced
 
 ## Table of Contents
@@ -548,6 +548,6 @@ Before making changes, verify:
 
 ---
 
-**Document Version**: 1.0  
-**Last Updated**: Phase 4  
+**Document Version**: 1.0
+**Last Updated**: Phase 4
 **Review Schedule**: Every phase or when boundaries change
