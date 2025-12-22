@@ -2,6 +2,22 @@
 
 Thank you for your interest in contributing to this Infrastructure as Code (IaC) repository! This document provides guidelines and instructions for setting up your development environment and contributing to the project.
 
+## ⚠️ Security & Authority Boundaries - READ FIRST
+
+**Before contributing, you MUST understand the security and authority boundaries of this repository.**
+
+This repository has explicit security controls that all contributors must follow:
+
+- ✅ **NetBox is authoritative** - All infrastructure intent comes from NetBox, not Terraform
+- ✅ **GitHub Actions only** - Terraform plan/apply operations MUST run in GitHub Actions (local execution is PROHIBITED)
+- ✅ **Attestations required** - All artifacts must be attested; manual artifacts are not permitted
+- ❌ **No manual Terraform execution** - Do not run `terraform plan` or `terraform apply` locally
+- ❌ **No manual artifacts** - Do not create or edit tfvars or configuration files manually
+
+**📖 Required Reading**: [docs/phase4/security.md](docs/phase4/security.md)
+
+Please review the complete security and authority boundaries documentation before making any contributions. Violations of these boundaries can compromise the security and integrity of the infrastructure pipeline.
+
 ## Table of Contents
 
 - [Getting Started](#getting-started)

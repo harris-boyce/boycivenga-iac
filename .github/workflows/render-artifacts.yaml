@@ -1,5 +1,30 @@
 name: Render Artifacts
 
+# ============================================================================
+# SECURITY & AUTHORITY BOUNDARIES
+# ============================================================================
+#
+# This workflow implements the authoritative data flow:
+#
+# 1. AUTHORITY BOUNDARY:
+#    - NetBox is the SOLE authoritative source of infrastructure intent
+#    - This workflow READS from NetBox (read-only API token)
+#    - Generated artifacts represent NetBox intent, not workflow decisions
+#    - Terraform and other tools implement what NetBox defines
+#
+# 2. ARTIFACT INTEGRITY:
+#    - All artifacts are cryptographically attested with SLSA provenance
+#    - Attestations provide verifiable proof of artifact origin and integrity
+#    - Attested artifacts are the ONLY artifacts Terraform may consume
+#
+# 3. READ-ONLY OPERATION:
+#    - This workflow is READ-ONLY; it does not apply infrastructure changes
+#    - Workflow exports data, generates configs, and uploads artifacts
+#    - No Terraform apply, no infrastructure modification
+#
+# See: docs/phase4/security.md for complete boundary documentation
+# ============================================================================
+
 on:
   # Allow manual triggering from GitHub UI
   workflow_dispatch:
@@ -48,6 +73,10 @@ jobs:
           mkdir -p artifacts/unifi
 
       - name: Export NetBox intent data
+        # AUTHORITY BOUNDARY:
+        # NetBox is the authoritative source of infrastructure intent.
+        # This step READS from NetBox (read-only API token).
+        # All downstream artifacts represent NetBox's authoritative intent.
         env:
           NETBOX_URL: ${{ secrets.NETBOX_URL }}
           NETBOX_API_TOKEN: ${{ secrets.NETBOX_API_TOKEN }}
@@ -111,6 +140,10 @@ jobs:
           retention-days: 30
 
       - name: Attest NetBox Export Artifacts
+        # SECURITY BOUNDARY:
+        # Generate SLSA provenance attestations for all artifacts.
+        # Attestations provide cryptographic proof of artifact origin and integrity.
+        # Only attested artifacts may be consumed by downstream workflows.
         uses: actions/attest-build-provenance@v1
         with:
           subject-path: 'artifacts/intent-export/*.json'
