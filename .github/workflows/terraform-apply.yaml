@@ -286,6 +286,7 @@ jobs:
 
           # Prepare policy input (same structure as terraform-plan workflow)
           # Note: We're re-verifying, so we know attestation was verified in plan workflow
+          CURRENT_TIMESTAMP=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
           cat > policy-input-metadata.json << EOF
           {
             "artifact": {
@@ -297,7 +298,7 @@ jobs:
               "attestation_verified": true,
               "pr_number": "${{ needs.validate-inputs.outputs.pr_number }}",
               "approver": "verified-in-plan",
-              "approved_at": "${{ github.event.head_commit.timestamp }}"
+              "approved_at": "${CURRENT_TIMESTAMP}"
             },
             "deletion_approved": false
           }
@@ -413,6 +414,7 @@ jobs:
       - name: Record apply metadata
         if: always()
         run: |
+          APPLY_TIMESTAMP=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
           cat > apply-metadata.json << EOF
           {
             "apply_run_id": "${{ github.run_id }}",
@@ -420,7 +422,7 @@ jobs:
             "site": "${{ needs.validate-inputs.outputs.site }}",
             "pr_number": "${{ needs.validate-inputs.outputs.pr_number }}",
             "applied_by": "${{ github.actor }}",
-            "applied_at": "${{ github.event.head_commit.timestamp }}",
+            "applied_at": "${APPLY_TIMESTAMP}",
             "binary_checksum": "${{ steps.verify-plan.outputs.binary_checksum }}",
             "json_checksum": "${{ steps.verify-plan.outputs.json_checksum }}",
             "attestation_verified": true,
