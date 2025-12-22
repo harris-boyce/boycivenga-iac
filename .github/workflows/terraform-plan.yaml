@@ -6,17 +6,23 @@ name: Terraform Plan
 #
 # This workflow enforces critical security and authority boundaries:
 #
-# 1. EXECUTION BOUNDARY:
+# 1. APPROVAL GATE:
+#    - This workflow ONLY runs after PR approval (pull_request_review event)
+#    - Cannot be triggered by branch push or automatic workflow completion
+#    - PR must explicitly reference the render artifacts run ID to use
+#    - Provides full traceability: PR number → Approver → Artifact source
+#
+# 2. EXECUTION BOUNDARY:
 #    - This workflow is the ONLY permitted way to execute Terraform plan
 #    - Manual/local execution of Terraform is PROHIBITED
 #    - No alternative CI/CD systems are permitted
 #
-# 2. AUTHORITY BOUNDARY:
+# 3. AUTHORITY BOUNDARY:
 #    - NetBox is the authoritative source of infrastructure intent
 #    - Terraform is an implementation tool, NOT an authority
 #    - All infrastructure definitions MUST come from NetBox via render pipeline
 #
-# 3. SECURITY BOUNDARY:
+# 4. SECURITY BOUNDARY:
 #    - All artifacts MUST have valid SLSA provenance attestations
 #    - Attestation verification is MANDATORY (enforced by verify-attestation action)
 #    - Unattested or modified artifacts are automatically rejected
@@ -25,22 +31,24 @@ name: Terraform Plan
 # ============================================================================
 
 on:
-  # Allow manual triggering with specific artifact run
+  # Trigger ONLY on PR approval - enforces approval gate
+  pull_request_review:
+    types: [submitted]
+  # Allow manual triggering with specific artifact run (for testing)
   workflow_dispatch:
     inputs:
       render_run_id:
         description: 'Render artifacts workflow run ID to use'
         required: true
         type: string
+      pr_number:
+        description: 'PR number (for traceability)'
+        required: false
+        type: string
       site:
         description: 'Site to plan (leave empty for all sites)'
         required: false
         type: string
-  # Automatically run when render artifacts completes
-  workflow_run:
-    workflows: ["Render Artifacts"]
-    types:
-      - completed
 
 # Prevent concurrent plans
 concurrency:
@@ -55,11 +63,19 @@ permissions:
 jobs:
   terraform-plan:
     runs-on: ubuntu-latest
-    # Only run if render artifacts succeeded or on manual dispatch
-    # Skip matrix items if a specific site was requested
+    # APPROVAL GATE: Only run on approved PRs or manual dispatch
+    # - For PR reviews: Only process if review state is 'approved'
+    # - For manual dispatch: Always allow (for testing/emergency)
+    # - Skip matrix items if a specific site was requested
     if: |
-      (github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success') &&
-      (github.event_name != 'workflow_dispatch' || github.event.inputs.site == '' || github.event.inputs.site == matrix.site)
+      (
+        (github.event_name == 'workflow_dispatch') ||
+        (github.event_name == 'pull_request_review' && github.event.review.state == 'approved')
+      ) && (
+        github.event_name != 'workflow_dispatch' || 
+        github.event.inputs.site == '' || 
+        github.event.inputs.site == matrix.site
+      )
 
     strategy:
       matrix:
@@ -71,6 +87,47 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
+      - name: Extract PR metadata (for approval events)
+        id: pr-metadata
+        if: github.event_name == 'pull_request_review'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          PR_NUMBER="${{ github.event.pull_request.number }}"
+          APPROVER="${{ github.event.review.user.login }}"
+          
+          echo "pr_number=$PR_NUMBER" >> $GITHUB_OUTPUT
+          echo "approver=$APPROVER" >> $GITHUB_OUTPUT
+          
+          echo "✅ PR #$PR_NUMBER approved by @$APPROVER"
+          
+          # Fetch PR body to extract render run ID
+          PR_BODY=$(gh pr view "$PR_NUMBER" --json body --jq '.body')
+          
+          # Extract render run ID from PR body
+          # Expected format: "Render Run: <run_id>" or "render_run_id: <run_id>" or link with /runs/<id>
+          RENDER_RUN_ID=$(echo "$PR_BODY" | grep -oP '(?i)render[_ ]run[_ ]?(?:id)?[:\s]*\K\d+' | head -1 || echo "")
+          
+          if [ -z "$RENDER_RUN_ID" ]; then
+            # Try extracting from GitHub Actions run URL
+            RENDER_RUN_ID=$(echo "$PR_BODY" | grep -oP 'actions/runs/\K\d+' | head -1 || echo "")
+          fi
+          
+          if [ -z "$RENDER_RUN_ID" ]; then
+            echo "❌ ERROR: Could not find render run ID in PR description"
+            echo ""
+            echo "PR body must contain render run ID in one of these formats:"
+            echo "  - 'Render Run: 123456789'"
+            echo "  - 'render_run_id: 123456789'"
+            echo "  - Link to workflow run: 'https://github.com/.../actions/runs/123456789'"
+            echo ""
+            echo "Please update the PR description with the render artifacts workflow run ID."
+            exit 1
+          fi
+          
+          echo "render_run_id=$RENDER_RUN_ID" >> $GITHUB_OUTPUT
+          echo "✅ Found render run ID: $RENDER_RUN_ID"
+
       - name: Determine render run ID
         id: determine-run
         env:
@@ -78,14 +135,20 @@ jobs:
         run: |
           if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
             RUN_ID="${{ github.event.inputs.render_run_id }}"
+            PR_NUM="${{ github.event.inputs.pr_number }}"
             echo "Using manually specified run ID: $RUN_ID"
+            [ -n "$PR_NUM" ] && echo "Associated with PR #$PR_NUM"
           else
-            # Use the workflow_run that triggered this
-            RUN_ID="${{ github.event.workflow_run.id }}"
-            echo "Using triggering workflow run ID: $RUN_ID"
+            # Use the render run ID extracted from PR
+            RUN_ID="${{ steps.pr-metadata.outputs.render_run_id }}"
+            PR_NUM="${{ steps.pr-metadata.outputs.pr_number }}"
+            APPROVER="${{ steps.pr-metadata.outputs.approver }}"
+            echo "Using render run ID from approved PR #$PR_NUM: $RUN_ID"
+            echo "Approved by: @$APPROVER"
           fi
 
           echo "run_id=$RUN_ID" >> $GITHUB_OUTPUT
+          echo "pr_number=$PR_NUM" >> $GITHUB_OUTPUT
           echo "✅ Will use artifacts from run: $RUN_ID"
 
       - name: Download attested artifacts
@@ -285,12 +348,35 @@ jobs:
         if: always()
         run: |
           DIFF_FILE="terraform/tfplan-${{ matrix.site }}-diff.md"
+          PR_NUM="${{ steps.determine-run.outputs.pr_number }}"
 
           cat >> $GITHUB_STEP_SUMMARY << 'EOF'
           ## Terraform Plan: ${{ matrix.site }}
 
           **Status**: ${{ steps.plan.outputs.plan_status || 'unknown' }}
           **Exit Code**: ${{ steps.plan.outputs.plan_exit_code || 'N/A' }}
+
+          ### Approval & Traceability
+          EOF
+
+          # Add PR and approval info if available
+          if [ -n "$PR_NUM" ]; then
+            if [ "${{ github.event_name }}" = "pull_request_review" ]; then
+              cat >> $GITHUB_STEP_SUMMARY << PREOF
+          - **PR**: [#$PR_NUM](${{ github.server_url }}/${{ github.repository }}/pull/$PR_NUM)
+          - **Approved By**: @${{ steps.pr-metadata.outputs.approver }}
+          - **Approval Event**: ${{ github.event.review.submitted_at }}
+          PREOF
+            else
+              cat >> $GITHUB_STEP_SUMMARY << PREOF
+          - **PR**: [#$PR_NUM](${{ github.server_url }}/${{ github.repository }}/pull/$PR_NUM) (manual dispatch)
+          PREOF
+            fi
+          else
+            echo "- **Trigger**: Manual dispatch (no PR associated)" >> $GITHUB_STEP_SUMMARY
+          fi
+
+          cat >> $GITHUB_STEP_SUMMARY << 'EOF'
 
           ### Artifacts Used
           - **Render Run**: [${{ steps.determine-run.outputs.run_id }}](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ steps.determine-run.outputs.run_id }})
@@ -337,15 +423,24 @@ jobs:
           cat >> $GITHUB_STEP_SUMMARY << 'EOF'
           # Terraform Plan Workflow Complete
 
+          ## Approval-Gated Execution
+
+          This workflow enforces PR approval before Terraform plan execution:
+          - ✅ **Trigger**: Pull request approval event only
+          - ✅ **Artifact Reference**: Explicit render run ID from PR description
+          - ✅ **Traceability**: PR number, approver, and timestamps recorded
+          - ❌ **Not Triggered By**: Direct push to branch, workflow_run, or unapproved PRs
+
           ## What This Workflow Does
 
           This workflow demonstrates the complete Terraform plan pipeline:
 
-          1. ✅ **Download Attested Artifacts** - Retrieves tfvars from render pipeline
-          2. ✅ **Verify Attestations** - Ensures artifacts have valid SLSA provenance
-          3. ✅ **Provider Schema Validation** - Validates against UniFi provider schema
-          4. ✅ **Generate Plan** - Creates both binary and JSON plan outputs
-          5. ✅ **Fail on Errors** - Exits with error on schema mismatch or config errors
+          1. ✅ **Extract PR Metadata** - Captures PR number, approver, and render run ID
+          2. ✅ **Download Attested Artifacts** - Retrieves tfvars from specified render run
+          3. ✅ **Verify Attestations** - Ensures artifacts have valid SLSA provenance
+          4. ✅ **Provider Schema Validation** - Validates against UniFi provider schema
+          5. ✅ **Generate Plan** - Creates both binary and JSON plan outputs
+          6. ✅ **Record Traceability** - Links plan to PR approval and artifact source
 
           ## Trust Boundary Compliance
 
