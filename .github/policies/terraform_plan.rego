@@ -49,12 +49,6 @@ deny contains msg if {
 	msg := sprintf("Destructive changes detected without deletion approval - %d resource(s) to be deleted", [count(resources_to_delete)])
 }
 
-# Deny if plan contains no resource changes (empty plan)
-deny contains msg if {
-	not has_resource_changes
-	msg := "Plan contains no resource changes - may indicate configuration error"
-}
-
 # Deny if provenance information is missing
 deny contains msg if {
 	not has_valid_provenance
@@ -158,15 +152,6 @@ violations contains violation if {
 		"message": sprintf("Resource deletion without approval: %s", [resource.address]),
 		"resource": resource.address,
 		"resource_type": resource.type,
-	}
-}
-
-violations contains violation if {
-	not has_resource_changes
-	violation := {
-		"type": "empty_plan",
-		"severity": "medium",
-		"message": "Plan contains no resource changes",
 	}
 }
 

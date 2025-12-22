@@ -186,6 +186,7 @@ jobs:
           ls -lh artifacts/tfvars/
 
       - name: Verify artifact attestations (REQUIRED)
+        id: verify-attestation
         # SECURITY BOUNDARY ENFORCEMENT:
         # This step is MANDATORY and enforces the trust boundary contract.
         # - All artifacts MUST have valid SLSA provenance attestations
@@ -374,6 +375,13 @@ jobs:
           # Prepare policy input document
           echo "📋 Preparing policy input..."
 
+          # Determine attestation verification status
+          # If verification step succeeded and verified count > 0, then verified = true
+          ATTESTATION_VERIFIED="false"
+          if [ "${{ steps.verify-attestation.outputs.verified-count }}" -gt "0" ]; then
+            ATTESTATION_VERIFIED="true"
+          fi
+
           # Create metadata JSON
           cat > policy-input-metadata.json << EOF
           {
@@ -383,7 +391,7 @@ jobs:
             },
             "provenance": {
               "render_run_id": "${{ steps.determine-run.outputs.run_id }}",
-              "attestation_verified": true,
+              "attestation_verified": ${ATTESTATION_VERIFIED},
               "pr_number": "${{ steps.determine-run.outputs.pr_number || 'unknown' }}",
               "approver": "${{ steps.pr-metadata.outputs.approver || 'manual' }}",
               "approved_at": "${{ github.event.review.submitted_at || github.event.head_commit.timestamp }}"
