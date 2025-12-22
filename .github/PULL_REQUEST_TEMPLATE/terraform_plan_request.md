@@ -14,7 +14,7 @@ This PR requests Terraform plan execution for the rendered artifacts from a spec
 **Render Run ID:** <!-- Replace with the workflow run ID from render-artifacts workflow -->
 
 Or provide the full workflow run URL:
-**Render Run:** <!-- https://github.com/harris-boyce/boycivenga-iac/actions/runs/XXXXXXXXXX -->
+**Render Run:** <!-- https://github.com/OWNER/REPO/actions/runs/XXXXXXXXXX -->
 
 ### Sites to Plan
 

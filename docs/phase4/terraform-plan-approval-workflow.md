@@ -43,7 +43,7 @@ Create a PR with the following format in the description:
 Render Run: 1234567890
 
 Or include the full URL:
-https://github.com/harris-boyce/boycivenga-iac/actions/runs/1234567890
+https://github.com/OWNER/REPO/actions/runs/1234567890
 
 ### Expected Changes
 - VLAN updates for pennington site
@@ -99,7 +99,7 @@ After the workflow completes:
 This PR requests Terraform plan execution for all sites based on the latest
 NetBox export and render.
 
-**Render Run:** https://github.com/harris-boyce/boycivenga-iac/actions/runs/1234567890
+**Render Run:** https://github.com/OWNER/REPO/actions/runs/1234567890
 
 ### Expected Changes
 - Update VLAN configurations across all sites

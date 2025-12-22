@@ -104,13 +104,21 @@ jobs:
           # Fetch PR body to extract render run ID
           PR_BODY=$(gh pr view "$PR_NUMBER" --json body --jq '.body')
           
-          # Extract render run ID from PR body
-          # Expected format: "Render Run: <run_id>" or "render_run_id: <run_id>" or link with /runs/<id>
-          RENDER_RUN_ID=$(echo "$PR_BODY" | grep -oP '(?i)render[_ ]run[_ ]?(?:id)?[:\s]*\K\d+' | head -1 || echo "")
+          # Extract render run ID from PR body using multiple pattern matching strategies
+          # Pattern 1: "Render Run: 123" or "render_run_id: 123" (case insensitive)
+          #   - Matches variations: render run, render_run, renderrun
+          #   - Followed by optional "id", colon or whitespace, then digits
+          PATTERN_RENDER_RUN='(?i)render[_ ]run[_ ]?(?:id)?[:\s]*\K\d+'
+          
+          # Pattern 2: GitHub Actions URL with /runs/ path
+          #   - Matches: .../actions/runs/123456789
+          PATTERN_ACTIONS_URL='actions/runs/\K\d+'
+          
+          RENDER_RUN_ID=$(echo "$PR_BODY" | grep -oP "$PATTERN_RENDER_RUN" | head -1 || echo "")
           
           if [ -z "$RENDER_RUN_ID" ]; then
             # Try extracting from GitHub Actions run URL
-            RENDER_RUN_ID=$(echo "$PR_BODY" | grep -oP 'actions/runs/\K\d+' | head -1 || echo "")
+            RENDER_RUN_ID=$(echo "$PR_BODY" | grep -oP "$PATTERN_ACTIONS_URL" | head -1 || echo "")
           fi
           
           if [ -z "$RENDER_RUN_ID" ]; then
