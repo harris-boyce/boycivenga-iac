@@ -101,7 +101,15 @@ For testing purposes, the workflow can be manually triggered via GitHub Actions 
 - Optionally accepts `pr_number` for traceability
 - Should only be used for development/testing scenarios
 
-See [docs/phase4/security.md](docs/phase4/security.md) for complete security documentation.
+### Complete Workflow Guide
+
+See [docs/phase4/terraform-plan-approval-workflow.md](docs/phase4/terraform-plan-approval-workflow.md) for:
+- Step-by-step approval workflow
+- PR template and examples
+- Troubleshooting guide
+- Security guarantees
+
+Also see [docs/phase4/security.md](docs/phase4/security.md) for complete security documentation.
 
 ## Artifact Attestation & Trust Boundary
 
