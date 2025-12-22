@@ -357,7 +357,16 @@ jobs:
 
           # Download and install OPA (pinned version for reproducibility)
           OPA_VERSION="0.60.0"
+          OPA_CHECKSUM="7d7cb45d9e6390646e603456503ca1232180604accc646de823e4d2c363dbeb0"
+
           curl -L -o opa "https://github.com/open-policy-agent/opa/releases/download/v${OPA_VERSION}/opa_linux_amd64_static"
+
+          # Verify checksum for security
+          echo "${OPA_CHECKSUM}  opa" | sha256sum -c - || {
+            echo "❌ OPA checksum verification failed"
+            exit 1
+          }
+
           chmod +x opa
 
           echo "✅ OPA installed: $(./opa version)"

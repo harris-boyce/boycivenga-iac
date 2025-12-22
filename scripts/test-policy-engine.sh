@@ -30,11 +30,19 @@ test -f docs/phase5/policy-engine.md && \
 echo ""
 echo "Test 4: Validating Rego policy syntax..."
 OPA_VERSION="0.60.0"
+OPA_CHECKSUM="7d7cb45d9e6390646e603456503ca1232180604accc646de823e4d2c363dbeb0"
 OPA_BIN="/tmp/opa-test"
 
 if [ ! -f "$OPA_BIN" ]; then
     echo "  📦 Downloading OPA ${OPA_VERSION}..."
     curl -sL -o "$OPA_BIN" "https://github.com/open-policy-agent/opa/releases/download/v${OPA_VERSION}/opa_linux_amd64_static"
+
+    # Verify checksum for security
+    echo "${OPA_CHECKSUM}  $OPA_BIN" | sha256sum -c - || {
+        echo "  ❌ OPA checksum verification failed"
+        exit 1
+    }
+
     chmod +x "$OPA_BIN"
 fi
 
