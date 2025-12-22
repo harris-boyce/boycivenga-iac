@@ -70,3 +70,14 @@ jobs:
 
       - name: Test plan output structure
         run: ./scripts/test-plan-output.sh
+
+  test-policy-engine:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Test policy engine integration
+        run: ./scripts/test-policy-engine.sh

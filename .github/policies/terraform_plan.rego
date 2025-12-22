@@ -193,14 +193,26 @@ violations contains violation if {
 # ==============================================================================
 
 # Human-readable summary of policy evaluation
-summary := {
-	"allowed": allow,
-	"total_resources": count(input.plan.resource_changes),
-	"to_create": count(resources_to_create),
-	"to_update": count(resources_to_update),
-	"to_delete": count(resources_to_delete),
-	"violations": count(violations),
-	"denial_reasons": count(deny),
-	"artifact_attested": artifact_attested,
-	"deletion_approved": deletion_approved,
+summary := result if {
+	result := {
+		"allowed": allow,
+		"total_resources": count(input.plan.resource_changes),
+		"to_create": count(resources_to_create),
+		"to_update": count(resources_to_update),
+		"to_delete": count(resources_to_delete),
+		"violations": count(violations),
+		"denial_reasons": count(deny),
+		"artifact_attested": _is_attested,
+		"deletion_approved": _is_deletion_approved,
+	}
 }
+
+# Helper to safely get attestation status
+_is_attested := true if {
+	artifact_attested
+} else := false
+
+# Helper to safely get deletion approval status
+_is_deletion_approved := true if {
+	deletion_approved
+} else := false
