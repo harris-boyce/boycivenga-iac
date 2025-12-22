@@ -152,28 +152,109 @@ variable "management_vlan" {
 - ✅ **GitHub Actions workflows** are the ONLY permitted execution environment for Terraform plan
 - ✅ Workflows run on GitHub-hosted or self-hosted runners managed by GitHub Actions
 - ✅ All Terraform operations are audited via GitHub Actions logs
+- ✅ **PR approval is REQUIRED** before Terraform plan execution
 - ❌ **Local workstations** MUST NOT run Terraform plan
 - ❌ **Manual CLI execution** is PROHIBITED
 - ❌ **CI/CD systems other than GitHub Actions** are PROHIBITED
+- ❌ **Automatic execution on push** is PROHIBITED
 
 #### Rationale
 
-Restricting execution to GitHub Actions provides:
+Restricting execution to GitHub Actions with PR approval provides:
 
 1. **Audit Trail**: Complete logs of all Terraform operations
 2. **Access Control**: GitHub repository permissions control who can trigger workflows
-3. **Attestation Enforcement**: Workflows enforce artifact attestation verification
-4. **Consistency**: Standardized execution environment for all operations
-5. **Secret Management**: GitHub Secrets provide secure credential storage
-6. **Immutability**: Workflow definitions are version controlled and reviewed
+3. **Approval Gate**: PR approval provides explicit authorization before plan execution
+4. **Attestation Enforcement**: Workflows enforce artifact attestation verification
+5. **Consistency**: Standardized execution environment for all operations
+6. **Secret Management**: GitHub Secrets provide secure credential storage
+7. **Immutability**: Workflow definitions are version controlled and reviewed
+8. **Traceability**: Full chain from PR → Approval → Artifact → Plan
+
+### PR Approval Requirement (NEW)
+
+**Statement**: **Terraform plan workflow MUST be triggered by PR approval event. Branch push and automatic workflow_run triggers are PROHIBITED.**
+
+#### What This Means
+
+- ✅ **PR approval** is the ONLY automatic trigger for Terraform plan
+- ✅ **PR must reference** the specific render artifacts run ID to use
+- ✅ **Traceability recorded**: PR number, approver, artifact source
+- ❌ **Branch push** does NOT trigger Terraform plan
+- ❌ **workflow_run** (automatic after render) is DISABLED
+- ❌ **Unapproved PRs** cannot trigger Terraform plan
+
+#### Workflow Pattern
+
+**✅ REQUIRED: PR Approval Trigger**
+```yaml
+# Terraform plan ONLY runs after PR approval
+# PR must include render run ID in description
+
+on:
+  pull_request_review:
+    types: [submitted]
+  workflow_dispatch:  # For testing only
+    inputs:
+      render_run_id:
+        required: true
+      pr_number:
+        required: false
+
+jobs:
+  terraform-plan:
+    if: |
+      (github.event_name == 'workflow_dispatch') ||
+      (github.event_name == 'pull_request_review' && github.event.review.state == 'approved')
+    steps:
+      - name: Extract PR metadata
+        # Extracts PR number, approver, and render run ID from PR
+      - name: Download artifacts from specified run
+        # Uses explicit render_run_id from PR description
+      - name: Verify attestations
+        uses: ./.github/actions/verify-attestation
+```
+
+**✅ REQUIRED: PR Description Format**
+```markdown
+## Infrastructure Change Request
+
+This PR requests Terraform plan execution for the following render:
+
+Render Run: 1234567890
+
+Or include a link:
+https://github.com/owner/repo/actions/runs/1234567890
+
+The workflow will extract the run ID automatically.
+```
 
 #### Permitted Execution Paths
 
-**✅ PERMITTED: GitHub Actions Workflow Dispatch**
+**✅ PERMITTED: PR Approval Event**
 ```yaml
-# User triggers workflow via GitHub UI or API
-# Workflow runs in GitHub Actions
+# User creates PR with render run ID
+# Maintainer approves PR
+# Workflow automatically triggers on approval event
 # All operations are logged and auditable
+
+on:
+  pull_request_review:
+    types: [submitted]
+
+jobs:
+  terraform-plan:
+    if: github.event.review.state == 'approved'
+    steps:
+      - name: Extract render run ID from PR
+        # Parses PR description for "Render Run: <id>"
+```
+
+**✅ PERMITTED: Manual Dispatch for Testing**
+```yaml
+# Developer triggers workflow via GitHub UI for testing
+# Must explicitly provide render_run_id
+# Optionally provide pr_number for traceability
 
 on:
   workflow_dispatch:
@@ -181,28 +262,45 @@ on:
       render_run_id:
         description: 'Render artifacts workflow run ID'
         required: true
-
-jobs:
-  terraform-plan:
-    runs-on: ubuntu-latest
-    steps:
-      - name: Verify attestations
-        uses: ./.github/actions/verify-attestation
-        # ... workflow continues
+      pr_number:
+        description: 'PR number (for traceability)'
+        required: false
 ```
 
-**✅ PERMITTED: Automatic Workflow Trigger**
+#### Prohibited Execution Paths
+
+**❌ PROHIBITED: Automatic workflow_run Trigger**
 ```yaml
-# Workflow automatically triggered by render completion
-# Still runs in GitHub Actions environment
+# DO NOT DO THIS:
+# Automatic execution after render completes bypasses approval
 
 on:
   workflow_run:
     workflows: ["Render Artifacts"]
     types: [completed]
+
+# This is PROHIBITED because:
+# - No PR approval required
+# - No explicit authorization
+# - No human review gate
+# - Reduces traceability
 ```
 
-#### Prohibited Execution Paths
+**❌ PROHIBITED: Branch Push Trigger**
+```yaml
+# DO NOT DO THIS:
+# Push-triggered plans bypass approval
+
+on:
+  push:
+    branches: [main]
+
+# This is PROHIBITED because:
+# - No PR approval required
+# - Can be triggered by any commit
+# - No artifact reference validation
+# - No authorization gate
+```
 
 **❌ PROHIBITED: Local Workstation Execution**
 ```bash
@@ -447,11 +545,13 @@ This section explicitly documents what is NOT ALLOWED in this repository.
 
 | Boundary | Enforcement Mechanism | Implementation |
 |----------|----------------------|----------------|
+| **PR Approval Required** | GitHub Actions event filtering | `pull_request_review` trigger with `state == 'approved'` check |
 | **NetBox Authority** | Documentation + code review | This document + PR review process |
 | **GitHub Actions Only** | No local credentials | Secrets stored in GitHub only; no local execution possible with real credentials |
 | **Attestation Required** | Automated gate | `.github/actions/verify-attestation` blocks unattested artifacts |
 | **No Manual Artifacts** | Attestation enforcement | Manual artifacts have no attestations and are rejected |
 | **Workflow Permissions** | GitHub YAML | `permissions:` block in workflows limits access |
+| **Artifact Traceability** | PR description parsing | Workflow extracts render run ID from PR body |
 
 ### Automated Enforcement
 
@@ -518,17 +618,22 @@ If a boundary violation is detected:
 
 ### Key Takeaways
 
-1. ✅ **NetBox is authoritative** - Terraform is NOT an authority for intent
-2. ✅ **GitHub Actions only** - Manual/local Terraform execution is PROHIBITED
-3. ✅ **Attestations required** - All artifacts MUST be attested and verified
-4. ❌ **No manual artifacts** - All artifacts MUST come from render pipeline
-5. ❌ **No bypass in production** - Security controls are mandatory
-6. ❌ **No alternative CI/CD** - GitHub Actions is the only execution environment
+1. ✅ **PR approval required** - Terraform plan ONLY runs after PR approval event
+2. ✅ **NetBox is authoritative** - Terraform is NOT an authority for intent
+3. ✅ **GitHub Actions only** - Manual/local Terraform execution is PROHIBITED
+4. ✅ **Attestations required** - All artifacts MUST be attested and verified
+5. ✅ **Explicit artifact references** - PR must specify render run ID to use
+6. ❌ **No manual artifacts** - All artifacts MUST come from render pipeline
+7. ❌ **No bypass in production** - Security controls are mandatory
+8. ❌ **No alternative CI/CD** - GitHub Actions is the only execution environment
+9. ❌ **No push triggers** - Branch push does NOT trigger Terraform plan
 
 ### Checklist for Contributors
 
 Before making changes, verify:
 
+- [ ] I understand that PR approval is required before Terraform plan execution
+- [ ] I will include render run ID in PR description when requesting plan execution
 - [ ] I understand that NetBox is the authoritative source of intent
 - [ ] I am not defining infrastructure intent in Terraform
 - [ ] I am using GitHub Actions for all Terraform operations
