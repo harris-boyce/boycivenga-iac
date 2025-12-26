@@ -29,3 +29,10 @@ This directory contains comprehensive documentation for the infrastructure as co
 - **[phase4/drift.md](phase4/drift.md)** - Infrastructure drift detection and remediation
 - **[phase4/quick-start.md](phase4/quick-start.md)** - Quick start guide for contributors
 - **[phase4/terraform-input-contract.md](phase4/terraform-input-contract.md)** - Terraform input contract specification
+
+### Phase 5: Policy Engine & Approval Decision Model
+
+- **[phase5/policy-engine.md](phase5/policy-engine.md)** - Open Policy Agent (OPA) integration and policy evaluation
+- **[phase5/policy-input-contract.md](phase5/policy-input-contract.md)** - Policy input formats and contract specification
+- **[phase5/approval-decision-model.md](phase5/approval-decision-model.md)** - Approval decision engine with auto-approve, require approval, and deny outcomes
+- **[phase5/apply-workflow.md](phase5/apply-workflow.md)** - Terraform apply workflow with policy gates
