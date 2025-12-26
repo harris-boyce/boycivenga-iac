@@ -382,7 +382,7 @@ jobs:
             ATTESTATION_VERIFIED="true"
           fi
 
-          # Create metadata JSON
+          # Create metadata JSON (no longer need deletion_approved)
           cat > policy-input-metadata.json << EOF
           {
             "artifact": {
@@ -395,8 +395,7 @@ jobs:
               "pr_number": "${{ steps.determine-run.outputs.pr_number || 'unknown' }}",
               "approver": "${{ steps.pr-metadata.outputs.approver || 'manual' }}",
               "approved_at": "${{ github.event.review.submitted_at || github.event.head_commit.timestamp }}"
-            },
-            "deletion_approved": false
+            }
           }
           EOF
 
@@ -420,6 +419,31 @@ jobs:
             echo "✅ Policy evaluation PASSED"
             echo "policy_result=pass" >> $GITHUB_OUTPUT
 
+            # Check if human approval is required
+            APPROVAL_REQUIRED=$(./opa eval \
+              --bundle ../.github/policies/ \
+              --input policy-input.json \
+              --format raw \
+              'data.terraform.plan.approval_required')
+
+            echo "approval_required=$APPROVAL_REQUIRED" >> $GITHUB_OUTPUT
+
+            if [ "$APPROVAL_REQUIRED" = "true" ]; then
+              echo "⚠️  HUMAN APPROVAL REQUIRED: Plan contains destructive changes"
+              echo ""
+              echo "This plan will require additional human approval in the apply workflow."
+              echo "Destructive changes detected:"
+              ./opa eval \
+                --bundle ../.github/policies/ \
+                --input policy-input.json \
+                --format pretty \
+                'data.terraform.plan.resources_to_delete'
+            else
+              echo "✅ AUTO-APPROVE: No destructive changes detected"
+              echo ""
+              echo "This plan can be auto-applied without additional approval."
+            fi
+
             # Show summary
             echo ""
             echo "Policy summary:"
@@ -431,6 +455,7 @@ jobs:
           else
             echo "❌ Policy evaluation FAILED"
             echo "policy_result=fail" >> $GITHUB_OUTPUT
+            echo "approval_required=false" >> $GITHUB_OUTPUT
 
             # Show detailed policy violations
             echo ""
@@ -452,6 +477,27 @@ jobs:
             exit 1
           fi
 
+      - name: Record Approval Requirement
+        if: steps.policy.outputs.policy_result == 'pass'
+        working-directory: terraform
+        run: |
+          APPROVAL_REQUIRED="${{ steps.policy.outputs.approval_required }}"
+          SITE="${{ matrix.site }}"
+
+          # Create approval metadata file
+          cat > "tfplan-${SITE}-approval.json" << EOF
+          {
+            "site": "${SITE}",
+            "approval_required": ${APPROVAL_REQUIRED},
+            "pr_number": "${{ steps.determine-run.outputs.pr_number }}",
+            "plan_run_id": "${{ github.run_id }}",
+            "evaluated_at": "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+          }
+          EOF
+
+          echo "✅ Approval metadata recorded"
+          cat "tfplan-${SITE}-approval.json"
+
       - name: Upload Terraform Plans
         uses: actions/upload-artifact@v4
         if: always()
@@ -461,6 +507,7 @@ jobs:
             terraform/tfplan-${{ matrix.site }}.binary
             terraform/tfplan-${{ matrix.site }}.json
             terraform/tfplan-${{ matrix.site }}-diff.md
+            terraform/tfplan-${{ matrix.site }}-approval.json
           retention-days: 30
 
       - name: Plan Summary
@@ -505,9 +552,33 @@ jobs:
           ### Policy Evaluation
           - **Policy Engine**: Open Policy Agent (OPA)
           - **Result**: ${{ steps.policy.outputs.policy_result == 'pass' && '✅ PASSED' || steps.policy.outputs.policy_result == 'fail' && '❌ FAILED' || '⚠️ SKIPPED' }}
-          - **Policies**: Attestation verification, resource change boundaries, destructive change approval
+          - **Approval Required**: ${{ steps.policy.outputs.approval_required == 'true' && '⚠️ YES - Destructive changes' || steps.policy.outputs.approval_required == 'false' && '✅ NO - Safe changes' || 'N/A' }}
+          - **Policies**: Attestation verification, resource change boundaries
 
-          ### Plan Output
+          EOF
+
+          # Add approval requirement details if applicable
+          if [ "${{ steps.policy.outputs.approval_required }}" = "true" ]; then
+            cat >> $GITHUB_STEP_SUMMARY << 'APPROVALEOF'
+
+          ### ⚠️ Human Approval Required
+
+          This plan contains **destructive changes** (resource deletions or replacements).
+          Additional human approval will be required in the apply workflow.
+
+          APPROVALEOF
+          elif [ "${{ steps.policy.outputs.approval_required }}" = "false" ]; then
+            cat >> $GITHUB_STEP_SUMMARY << 'AUTOEOF'
+
+          ### ✅ Auto-Approve Eligible
+
+          This plan contains **safe changes only** (no destructive operations).
+
+          AUTOEOF
+          fi
+
+          cat >> $GITHUB_STEP_SUMMARY << 'EOF'
+
           - Binary plan: `tfplan-${{ matrix.site }}.binary`
           - JSON plan: `tfplan-${{ matrix.site }}.json`
           - Structured diff: `tfplan-${{ matrix.site }}-diff.md`
