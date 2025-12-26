@@ -355,7 +355,7 @@ This section documents inherent limitations in the current implementation.
 
 **Impact**: Applying to multiple sites takes longer (no parallelization).
 
-**Example**: Applying to 5 sites sequentially could take 25 minutes vs. 5 minutes in parallel.
+**Example**: Applying to 5 sites serially could take 25 minutes vs. 5 minutes in parallel.
 
 **Rationale**: Prevents state locking conflicts and maintains clear audit trail.
 
@@ -455,7 +455,7 @@ This section documents risks specific to the OPA policy engine.
 
 **Impact**: Policies may fail to evaluate correctly if input structure changes.
 
-**Example**: Terraform upgrades change plan JSON format, policy rules stop working.
+**Example**: A Terraform upgrade changes the plan JSON format, causing policy rules to stop working.
 
 **Mitigation**: Pin Terraform version and test policy changes thoroughly.
 
