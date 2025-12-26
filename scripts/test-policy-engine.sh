@@ -91,8 +91,7 @@ cat > /tmp/policy-test-pass.json << 'EOF'
       "attestation_verified": true,
       "pr_number": "1",
       "approver": "testuser"
-    },
-    "deletion_approved": false
+    }
   }
 }
 EOF
@@ -150,8 +149,8 @@ else
     exit 1
 fi
 
-# Create test input - FAIL scenario (unapproved deletion)
-cat > /tmp/policy-test-fail-deletion.json << 'EOF'
+# Create test input - PASS scenario with approval required (deletion)
+cat > /tmp/policy-test-approval-required.json << 'EOF'
 {
   "plan": {
     "resource_changes": [
@@ -174,21 +173,32 @@ cat > /tmp/policy-test-fail-deletion.json << 'EOF'
       "attestation_verified": true,
       "pr_number": "1",
       "approver": "testuser"
-    },
-    "deletion_approved": false
+    }
   }
 }
 EOF
 
-echo "  🔍 Testing FAIL scenario (unapproved deletion)..."
+echo "  🔍 Testing PASS scenario with approval required (deletion)..."
 if "$OPA_BIN" eval \
     --bundle .github/policies/ \
-    --input /tmp/policy-test-fail-deletion.json \
+    --input /tmp/policy-test-approval-required.json \
     --format pretty \
-    'data.terraform.plan.allow' | grep -q "false"; then
-    echo "  ✅ Policy correctly denies unapproved deletion"
+    'data.terraform.plan.allow' | grep -q "true"; then
+    echo "  ✅ Policy correctly allows plan with deletion"
 else
-    echo "  ❌ Policy incorrectly allowed unapproved deletion"
+    echo "  ❌ Policy incorrectly denied plan with deletion"
+    exit 1
+fi
+
+echo "  🔍 Verifying approval_required flag is set for deletion..."
+if "$OPA_BIN" eval \
+    --bundle .github/policies/ \
+    --input /tmp/policy-test-approval-required.json \
+    --format raw \
+    'data.terraform.plan.approval_required' | grep -q "true"; then
+    echo "  ✅ Policy correctly sets approval_required=true for deletion"
+else
+    echo "  ❌ Policy failed to set approval_required=true for deletion"
     exit 1
 fi
 
@@ -202,6 +212,7 @@ SUMMARY=$("$OPA_BIN" eval \
     'data.terraform.plan.summary')
 
 echo "$SUMMARY" | grep -q "allowed" && echo "  ✅ Summary includes 'allowed' field"
+echo "$SUMMARY" | grep -q "approval_required" && echo "  ✅ Summary includes 'approval_required' field"
 echo "$SUMMARY" | grep -q "total_resources" && echo "  ✅ Summary includes 'total_resources' field"
 echo "$SUMMARY" | grep -q "violations" && echo "  ✅ Summary includes 'violations' field"
 
