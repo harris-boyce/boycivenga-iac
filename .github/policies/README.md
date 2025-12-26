@@ -55,6 +55,21 @@ The main decision rule is `data.terraform.plan.allow`:
 - **true**: Plan is approved and can proceed
 - **false**: Plan is denied and workflow fails
 
+### Structured Decision Outputs
+
+The policy emits comprehensive, agent-consumable decision outputs:
+
+- **`data.terraform.plan.decision`**: Complete structured decision output (JSON)
+  - Includes outcome, reason, policy results, resource summary, context, and next steps
+  - Designed for agent/LLM consumption and human explainability
+  - See [docs/phase5/decision-output.md](../../docs/phase5/decision-output.md) for complete documentation
+
+- **`data.terraform.plan.explanation`**: Human-readable text explanation
+  - Formatted text suitable for direct display to users
+  - Generated from the structured decision output
+
+- **`data.terraform.plan.summary`**: Legacy summary (backwards compatibility)
+
 ### Testing Policies Locally
 
 You can test policies locally using OPA CLI:
@@ -104,6 +119,12 @@ EOF
 
 # Get summary
 ./opa eval --bundle .github/policies/ --input test-input.json 'data.terraform.plan.summary'
+
+# Get structured decision output (agent-consumable)
+./opa eval --bundle .github/policies/ --input test-input.json 'data.terraform.plan.decision'
+
+# Get human-readable explanation
+./opa eval --bundle .github/policies/ --input test-input.json --format raw 'data.terraform.plan.explanation'
 ```
 
 ## Policy Rules

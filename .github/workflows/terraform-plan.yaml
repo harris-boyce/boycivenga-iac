@@ -410,6 +410,36 @@ jobs:
           echo "🔐 Evaluating policy..."
           echo ""
 
+          # Extract structured decision output (agent-consumable)
+          echo "📊 Extracting structured decision output..."
+          ./opa eval \
+            --bundle ../.github/policies/ \
+            --input policy-input.json \
+            --format json \
+            'data.terraform.plan.decision' > tfplan-${{ matrix.site }}-decision.json
+
+          # Extract human-readable explanation
+          echo "📝 Extracting human explanation..."
+          ./opa eval \
+            --bundle ../.github/policies/ \
+            --input policy-input.json \
+            --format raw \
+            'data.terraform.plan.explanation' > tfplan-${{ matrix.site }}-explanation.txt
+
+          # Extract outcome for workflow control
+          OUTCOME=$(jq -r '.result.outcome' tfplan-${{ matrix.site }}-decision.json)
+          echo "outcome=${OUTCOME}" >> $GITHUB_OUTPUT
+
+          # Display the explanation to console
+          echo ""
+          echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+          echo "POLICY DECISION"
+          echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+          cat tfplan-${{ matrix.site }}-explanation.txt
+          echo ""
+          echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+          echo ""
+
           # Check if policy allows the plan
           if ./opa eval \
               --bundle ../.github/policies/ \
@@ -429,50 +459,17 @@ jobs:
             echo "approval_required=$APPROVAL_REQUIRED" >> $GITHUB_OUTPUT
 
             if [ "$APPROVAL_REQUIRED" = "true" ]; then
-              echo "⚠️  HUMAN APPROVAL REQUIRED: Plan contains destructive changes"
-              echo ""
-              echo "This plan will require additional human approval in the apply workflow."
-              echo "Destructive changes detected:"
-              ./opa eval \
-                --bundle ../.github/policies/ \
-                --input policy-input.json \
-                --format pretty \
-                'data.terraform.plan.resources_to_delete'
+              echo "⚠️  Plan requires additional approval before apply"
             else
-              echo "✅ AUTO-APPROVE: No destructive changes detected"
-              echo ""
-              echo "This plan can be auto-applied without additional approval."
+              echo "✅ Plan can proceed to apply without additional approval"
             fi
-
-            # Show summary
-            echo ""
-            echo "Policy summary:"
-            ./opa eval \
-              --bundle ../.github/policies/ \
-              --input policy-input.json \
-              --format pretty \
-              'data.terraform.plan.summary'
           else
             echo "❌ Policy evaluation FAILED"
             echo "policy_result=fail" >> $GITHUB_OUTPUT
             echo "approval_required=false" >> $GITHUB_OUTPUT
 
-            # Show detailed policy violations
-            echo ""
-            echo "Policy denial reasons:"
-            ./opa eval \
-              --bundle ../.github/policies/ \
-              --input policy-input.json \
-              --format pretty \
-              'data.terraform.plan.deny'
-
-            echo ""
-            echo "Detailed violations:"
-            ./opa eval \
-              --bundle ../.github/policies/ \
-              --input policy-input.json \
-              --format pretty \
-              'data.terraform.plan.violations'
+            # Explanation already displayed above
+            echo "❌ Plan cannot proceed - see policy decision above for details"
 
             exit 1
           fi
@@ -508,6 +505,8 @@ jobs:
             terraform/tfplan-${{ matrix.site }}.json
             terraform/tfplan-${{ matrix.site }}-diff.md
             terraform/tfplan-${{ matrix.site }}-approval.json
+            terraform/tfplan-${{ matrix.site }}-decision.json
+            terraform/tfplan-${{ matrix.site }}-explanation.txt
           retention-days: 30
 
       - name: Plan Summary
@@ -551,30 +550,24 @@ jobs:
 
           ### Policy Evaluation
           - **Policy Engine**: Open Policy Agent (OPA)
-          - **Result**: ${{ steps.policy.outputs.policy_result == 'pass' && '✅ PASSED' || steps.policy.outputs.policy_result == 'fail' && '❌ FAILED' || '⚠️ SKIPPED' }}
-          - **Approval Required**: ${{ steps.policy.outputs.approval_required == 'true' && '⚠️ YES - Destructive changes' || steps.policy.outputs.approval_required == 'false' && '✅ NO - Safe changes' || 'N/A' }}
-          - **Policies**: Attestation verification, resource change boundaries
+          - **Decision**: ${{ steps.policy.outputs.outcome == 'auto_approve' && '✅ AUTO-APPROVE' || steps.policy.outputs.outcome == 'require_approval' && '⚠️ REQUIRE APPROVAL' || steps.policy.outputs.outcome == 'deny' && '❌ DENY' || 'N/A' }}
+          - **Policy Result**: ${{ steps.policy.outputs.policy_result == 'pass' && '✅ PASSED' || steps.policy.outputs.policy_result == 'fail' && '❌ FAILED' || '⚠️ SKIPPED' }}
 
           EOF
 
-          # Add approval requirement details if applicable
-          if [ "${{ steps.policy.outputs.approval_required }}" = "true" ]; then
-            cat >> $GITHUB_STEP_SUMMARY << 'APPROVALEOF'
+          # Add decision explanation if available
+          if [ -f "terraform/tfplan-${{ matrix.site }}-explanation.txt" ]; then
+            cat >> $GITHUB_STEP_SUMMARY << 'EXPLANATIONEOF'
 
-          ### ⚠️ Human Approval Required
+          ### 📋 Policy Decision Explanation
 
-          This plan contains **destructive changes** (resource deletions or replacements).
-          Additional human approval will be required in the apply workflow.
+          ```
+          EXPLANATIONEOF
+            cat "terraform/tfplan-${{ matrix.site }}-explanation.txt" >> $GITHUB_STEP_SUMMARY
+            cat >> $GITHUB_STEP_SUMMARY << 'EXPLANATIONEOF'
+          ```
 
-          APPROVALEOF
-          elif [ "${{ steps.policy.outputs.approval_required }}" = "false" ]; then
-            cat >> $GITHUB_STEP_SUMMARY << 'AUTOEOF'
-
-          ### ✅ Auto-Approve Eligible
-
-          This plan contains **safe changes only** (no destructive operations).
-
-          AUTOEOF
+          EXPLANATIONEOF
           fi
 
           cat >> $GITHUB_STEP_SUMMARY << 'EOF'
@@ -582,6 +575,8 @@ jobs:
           - Binary plan: `tfplan-${{ matrix.site }}.binary`
           - JSON plan: `tfplan-${{ matrix.site }}.json`
           - Structured diff: `tfplan-${{ matrix.site }}-diff.md`
+          - **Decision output**: `tfplan-${{ matrix.site }}-decision.json` (agent-consumable)
+          - **Explanation**: `tfplan-${{ matrix.site }}-explanation.txt` (human-readable)
 
           EOF
 

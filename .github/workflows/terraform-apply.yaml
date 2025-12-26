@@ -363,6 +363,31 @@ jobs:
           echo "🔐 Re-evaluating policy..."
           echo ""
 
+          # Extract structured decision output for re-verification
+          echo "📊 Extracting decision output..."
+          ./opa eval \
+            --bundle .github/policies/ \
+            --input policy-input.json \
+            --format json \
+            'data.terraform.plan.decision' > ../decision-output-revalidated.json
+
+          # Extract human explanation
+          ./opa eval \
+            --bundle .github/policies/ \
+            --input policy-input.json \
+            --format raw \
+            'data.terraform.plan.explanation' > ../decision-explanation-revalidated.txt
+
+          # Display re-validation decision
+          echo ""
+          echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+          echo "POLICY RE-VALIDATION DECISION"
+          echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+          cat ../decision-explanation-revalidated.txt
+          echo ""
+          echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+          echo ""
+
           if ./opa eval \
               --bundle .github/policies/ \
               --input policy-input.json \
@@ -373,19 +398,15 @@ jobs:
           else
             echo "❌ Policy re-evaluation FAILED"
             echo ""
-            echo "The plan no longer passes policy evaluation."
+            echo "⚠️  WARNING: The plan no longer passes policy evaluation!"
+            echo ""
             echo "This should NOT happen if the original plan passed."
             echo "Possible causes:"
             echo "  - Plan file was tampered with"
             echo "  - Policy rules changed between plan and apply"
             echo "  - Metadata inconsistency"
             echo ""
-            echo "Policy denial reasons:"
-            ./opa eval \
-              --bundle .github/policies/ \
-              --input policy-input.json \
-              --format pretty \
-              'data.terraform.plan.deny'
+            echo "See decision explanation above for details."
 
             exit 1
           fi
@@ -464,6 +485,19 @@ jobs:
         if: always()
         run: |
           APPLY_TIMESTAMP=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
+
+          # Include original decision context if available
+          ORIGINAL_DECISION="{}"
+          if [ -f "artifacts/plans/tfplan-${{ needs.validate-inputs.outputs.site }}-decision.json" ]; then
+            ORIGINAL_DECISION=$(cat "artifacts/plans/tfplan-${{ needs.validate-inputs.outputs.site }}-decision.json")
+          fi
+
+          # Include revalidated decision if available
+          REVALIDATED_DECISION="{}"
+          if [ -f "decision-output-revalidated.json" ]; then
+            REVALIDATED_DECISION=$(cat decision-output-revalidated.json)
+          fi
+
           cat > apply-metadata.json << EOF
           {
             "apply_run_id": "${{ github.run_id }}",
@@ -476,7 +510,9 @@ jobs:
             "json_checksum": "${{ steps.verify-plan.outputs.json_checksum }}",
             "attestation_verified": true,
             "policy_result": "${{ steps.verify-policy.outputs.policy_result }}",
-            "apply_status": "${{ steps.apply.outputs.apply_status }}"
+            "apply_status": "${{ steps.apply.outputs.apply_status }}",
+            "original_decision": ${ORIGINAL_DECISION},
+            "revalidated_decision": ${REVALIDATED_DECISION}
           }
           EOF
 
@@ -488,7 +524,10 @@ jobs:
         if: always()
         with:
           name: terraform-apply-metadata-${{ needs.validate-inputs.outputs.site }}
-          path: apply-metadata.json
+          path: |
+            apply-metadata.json
+            decision-output-revalidated.json
+            decision-explanation-revalidated.txt
           retention-days: 90  # Keep apply records longer for audit
 
       - name: Apply Summary
@@ -544,6 +583,25 @@ jobs:
           - ✅ **Policy Re-evaluated**: Plan passed policy checks
           - ✅ **Plan Integrity**: Binary and JSON checksums verified
           - ✅ **Plan Workflow Validated**: Run ${{ needs.validate-inputs.outputs.plan_run_id }} completed successfully
+
+          EOF
+
+          # Add revalidated decision explanation if available
+          if [ -f "decision-explanation-revalidated.txt" ]; then
+            cat >> $GITHUB_STEP_SUMMARY << 'DECISIONEOF'
+
+          ## 📋 Policy Re-validation Decision
+
+          ```
+          DECISIONEOF
+            cat decision-explanation-revalidated.txt >> $GITHUB_STEP_SUMMARY
+            cat >> $GITHUB_STEP_SUMMARY << 'DECISIONEOF'
+          ```
+
+          DECISIONEOF
+          fi
+
+          cat >> $GITHUB_STEP_SUMMARY << 'EOF'
 
           ## Plan File Checksums
 
