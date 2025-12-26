@@ -485,19 +485,19 @@ jobs:
         if: always()
         run: |
           APPLY_TIMESTAMP=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
-          
+
           # Include original decision context if available
           ORIGINAL_DECISION="{}"
           if [ -f "artifacts/plans/tfplan-${{ needs.validate-inputs.outputs.site }}-decision.json" ]; then
             ORIGINAL_DECISION=$(cat "artifacts/plans/tfplan-${{ needs.validate-inputs.outputs.site }}-decision.json")
           fi
-          
+
           # Include revalidated decision if available
           REVALIDATED_DECISION="{}"
           if [ -f "decision-output-revalidated.json" ]; then
             REVALIDATED_DECISION=$(cat decision-output-revalidated.json)
           fi
-          
+
           cat > apply-metadata.json << EOF
           {
             "apply_run_id": "${{ github.run_id }}",
@@ -585,7 +585,7 @@ jobs:
           - ✅ **Plan Workflow Validated**: Run ${{ needs.validate-inputs.outputs.plan_run_id }} completed successfully
 
           EOF
-          
+
           # Add revalidated decision explanation if available
           if [ -f "decision-explanation-revalidated.txt" ]; then
             cat >> $GITHUB_STEP_SUMMARY << 'DECISIONEOF'
@@ -600,7 +600,7 @@ jobs:
 
           DECISIONEOF
           fi
-          
+
           cat >> $GITHUB_STEP_SUMMARY << 'EOF'
 
           ## Plan File Checksums

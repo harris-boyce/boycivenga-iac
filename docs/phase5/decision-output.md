@@ -472,7 +472,7 @@ The `outcome` field maps to three possible values:
 ```
 ✅ DECISION: AUTO-APPROVE
 
-This Terraform plan has been automatically approved for apply operations. 
+This Terraform plan has been automatically approved for apply operations.
 All policy checks passed and no destructive changes were detected.
 
 POLICY EVALUATION RESULTS:
@@ -586,7 +586,7 @@ NEXT STEPS:
 ```
 ⚠️ DECISION: REQUIRE APPROVAL
 
-This Terraform plan requires explicit human approval before apply operations. 
+This Terraform plan requires explicit human approval before apply operations.
 Destructive changes were detected that need review.
 
 POLICY EVALUATION RESULTS:
@@ -716,7 +716,7 @@ NEXT STEPS:
 ```
 ❌ DECISION: DENY
 
-This Terraform plan has been denied and cannot proceed to apply operations. 
+This Terraform plan has been denied and cannot proceed to apply operations.
 One or more policy violations were detected.
 
 POLICY EVALUATION RESULTS:
@@ -751,21 +751,21 @@ The decision output is captured in the terraform-plan workflow:
   id: policy
   run: |
     # ... OPA evaluation ...
-    
+
     # Extract structured decision output
     /tmp/opa eval \
       --bundle .github/policies/ \
       --input policy-input.json \
       --format json \
       'data.terraform.plan.decision' > decision-output.json
-    
+
     # Extract human explanation
     /tmp/opa eval \
       --bundle .github/policies/ \
       --input policy-input.json \
       --format raw \
       'data.terraform.plan.explanation' > decision-explanation.txt
-    
+
     # Parse outcome for workflow control
     OUTCOME=$(jq -r '.result.outcome' decision-output.json)
     echo "outcome=${OUTCOME}" >> $GITHUB_OUTPUT
@@ -837,7 +837,7 @@ Policy Checks:
 
 Resource Changes:
 - [X] resources will be created
-- [Y] resources will be updated  
+- [Y] resources will be updated
 - [Z] resources will be deleted
 
 [If outcome is not auto_approve:]
