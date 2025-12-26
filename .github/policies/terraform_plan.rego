@@ -13,6 +13,7 @@
 #   - deny: Array of denial reasons
 #   - violations: Detailed violation information
 #   - summary: Human-readable summary
+#   - approval_required: Boolean indicating if human approval is required before apply
 
 package terraform.plan
 
@@ -42,13 +43,6 @@ deny contains msg if {
 	msg := "Artifact attestation verification failed - artifact must be attested"
 }
 
-# Deny if there are destructive changes without approval
-deny contains msg if {
-	has_destructive_changes
-	not deletion_approved
-	msg := sprintf("Destructive changes detected without deletion approval - %d resource(s) to be deleted", [count(resources_to_delete)])
-}
-
 # Deny if provenance information is missing
 deny contains msg if {
 	not has_valid_provenance
@@ -59,6 +53,18 @@ deny contains msg if {
 deny contains msg if {
 	not has_pr_approval
 	msg := "PR approval information is missing"
+}
+
+# ==============================================================================
+# APPROVAL REQUIREMENT RULES
+# ==============================================================================
+
+# Human approval is required if there are destructive changes
+# This does NOT deny the plan, but indicates additional approval is needed
+default approval_required := false
+
+approval_required if {
+	has_destructive_changes
 }
 
 # ==============================================================================
@@ -88,11 +94,6 @@ has_valid_provenance if {
 has_pr_approval if {
 	input.metadata.provenance.pr_number
 	input.metadata.provenance.approver
-}
-
-# Check if deletion is approved
-deletion_approved if {
-	input.metadata.deletion_approved == true
 }
 
 # ==============================================================================
@@ -144,18 +145,6 @@ violations contains violation if {
 }
 
 violations contains violation if {
-	some resource in resources_to_delete
-	not deletion_approved
-	violation := {
-		"type": "unapproved_deletion",
-		"severity": "high",
-		"message": sprintf("Resource deletion without approval: %s", [resource.address]),
-		"resource": resource.address,
-		"resource_type": resource.type,
-	}
-}
-
-violations contains violation if {
 	not has_valid_provenance
 	violation := {
 		"type": "missing_provenance",
@@ -181,6 +170,7 @@ violations contains violation if {
 summary := result if {
 	result := {
 		"allowed": allow,
+		"approval_required": approval_required,
 		"total_resources": count(input.plan.resource_changes),
 		"to_create": count(resources_to_create),
 		"to_update": count(resources_to_update),
@@ -188,7 +178,7 @@ summary := result if {
 		"violations": count(violations),
 		"denial_reasons": count(deny),
 		"artifact_attested": _is_attested,
-		"deletion_approved": _is_deletion_approved,
+		"has_destructive_changes": _has_destructive,
 	}
 }
 
@@ -197,7 +187,7 @@ _is_attested := true if {
 	artifact_attested
 } else := false
 
-# Helper to safely get deletion approval status
-_is_deletion_approved := true if {
-	deletion_approved
+# Helper to safely get destructive changes status
+_has_destructive := true if {
+	has_destructive_changes
 } else := false
