@@ -12,8 +12,10 @@
 #   - allow: Boolean indicating if plan is approved
 #   - deny: Array of denial reasons
 #   - violations: Detailed violation information
-#   - summary: Human-readable summary
+#   - summary: Human-readable summary (legacy)
 #   - approval_required: Boolean indicating if human approval is required before apply
+#   - decision: Structured decision output (agent-consumable) with complete context
+#   - explanation: Human-readable explanation of the decision
 
 package terraform.plan
 
@@ -163,7 +165,215 @@ violations contains violation if {
 }
 
 # ==============================================================================
-# SUMMARY
+# STRUCTURED DECISION OUTPUT (AGENT-CONSUMABLE)
+# ==============================================================================
+
+# Structured decision output that provides complete context for agents/LLMs
+# to explain the decision to humans. This includes outcome, reasoning, policies
+# evaluated, and actionable next steps.
+decision := result if {
+	result := {
+		"outcome": _decision_outcome,
+		"allowed": allow,
+		"approval_required": approval_required,
+		"reason": _decision_reason,
+		"timestamp": time.now_ns(),
+		"policies_evaluated": _policies_evaluated,
+		"policy_results": _policy_results,
+		"resource_summary": {
+			"total": count(input.plan.resource_changes),
+			"to_create": count(resources_to_create),
+			"to_update": count(resources_to_update),
+			"to_delete": count(resources_to_delete),
+		},
+		"context": {
+			"artifact": input.metadata.artifact,
+			"provenance": input.metadata.provenance,
+			"has_destructive_changes": _has_destructive,
+			"artifact_attested": _is_attested,
+		},
+		"violations": violations,
+		"next_steps": _next_steps,
+	}
+}
+
+# Determine the high-level decision outcome
+_decision_outcome := "auto_approve" if {
+	allow
+	not approval_required
+} else := "require_approval" if {
+	allow
+	approval_required
+} else := "deny"
+
+# Generate human-readable reason for the decision
+_decision_reason := reason if {
+	allow
+	not approval_required
+	reason := "All policy checks passed. No destructive changes detected. Plan is approved for apply."
+} else := reason if {
+	allow
+	approval_required
+	reason := sprintf("Destructive changes detected (%d resources to delete). Human approval required before apply.", [count(resources_to_delete)])
+} else := reason if {
+	not allow
+	count(deny) > 0
+	reason := sprintf("Policy evaluation failed: %s", [concat("; ", deny)])
+}
+
+# List of policies that were evaluated
+_policies_evaluated := [
+	{"name": "attestation_verification", "description": "Verify artifact attestation is present and valid"},
+	{"name": "provenance_validation", "description": "Verify provenance information is complete"},
+	{"name": "pr_approval_check", "description": "Verify PR approval information is present"},
+	{"name": "destructive_change_gate", "description": "Flag destructive changes for additional approval"},
+]
+
+# Detailed results for each policy
+_policy_results := result if {
+	result := [
+		{
+			"policy": "attestation_verification",
+			"passed": _is_attested,
+			"required": true,
+			"message": _attestation_message,
+		},
+		{
+			"policy": "provenance_validation",
+			"passed": has_valid_provenance,
+			"required": true,
+			"message": _provenance_message,
+		},
+		{
+			"policy": "pr_approval_check",
+			"passed": has_pr_approval,
+			"required": true,
+			"message": _pr_approval_message,
+		},
+		{
+			"policy": "destructive_change_gate",
+			"passed": _no_destructive_changes,
+			"required": false,
+			"message": _destructive_change_message,
+		},
+	]
+}
+
+# Helper for destructive changes check
+_no_destructive_changes := true if {
+	not has_destructive_changes
+} else := false
+
+# Policy-specific messages
+_attestation_message := "Artifact attestation verified successfully" if {
+	_is_attested
+} else := "Artifact attestation verification failed or missing"
+
+_provenance_message := "Provenance information is complete and valid" if {
+	has_valid_provenance
+} else := "Provenance information is missing or invalid"
+
+_pr_approval_message := "PR approval information is present" if {
+	has_pr_approval
+} else := "PR approval information is missing"
+
+_destructive_change_message := sprintf("%d destructive changes detected", [count(resources_to_delete)]) if {
+	has_destructive_changes
+} else := "No destructive changes detected"
+
+# Next steps based on decision outcome
+_next_steps := steps if {
+	_decision_outcome == "auto_approve"
+	steps := [
+		"Plan artifacts will be uploaded for apply workflow",
+		"Trigger terraform-apply workflow when ready to deploy",
+		"Provide plan_run_id, site, and pr_number to apply workflow",
+	]
+} else := steps if {
+	_decision_outcome == "require_approval"
+	steps := [
+		"Review destructive changes to ensure they are intentional",
+		"Verify resources to be deleted are no longer needed",
+		"Re-trigger workflow with deletion_approved: true if approved",
+		"Plan artifacts will be uploaded after explicit approval",
+	]
+} else := steps if {
+	_decision_outcome == "deny"
+	steps := [
+		"Review policy violations listed above",
+		"Address each violation (e.g., fix attestation, add PR approval)",
+		"Re-run the workflow after fixing issues",
+		"Do not attempt to bypass security checks",
+	]
+}
+
+# ==============================================================================
+# HUMAN-READABLE EXPLANATION
+# ==============================================================================
+
+# Generate a complete human-readable explanation of the decision
+explanation := text if {
+	text := sprintf("%s\n\n%s\n\n%s\n\n%s", [
+		_explanation_header,
+		_explanation_policies,
+		_explanation_resources,
+		_explanation_next_steps,
+	])
+}
+
+_explanation_header := header if {
+	_decision_outcome == "auto_approve"
+	header := "✅ DECISION: AUTO-APPROVE\n\nThis Terraform plan has been automatically approved for apply operations. All policy checks passed and no destructive changes were detected."
+} else := header if {
+	_decision_outcome == "require_approval"
+	header := "⚠️ DECISION: REQUIRE APPROVAL\n\nThis Terraform plan requires explicit human approval before apply operations. Destructive changes were detected that need review."
+} else := header if {
+	_decision_outcome == "deny"
+	header := "❌ DECISION: DENY\n\nThis Terraform plan has been denied and cannot proceed to apply operations. One or more policy violations were detected."
+}
+
+_explanation_policies := text if {
+	text := sprintf("POLICY EVALUATION RESULTS:\n%s", [concat("\n", [
+		sprintf("  • %s: %s - %s", [
+			result.policy,
+			_pass_fail_label(result.passed),
+			result.message,
+		]) |
+		result := _policy_results[_]
+	])])
+}
+
+_pass_fail_label(passed) := "✅ PASSED" if {
+	passed
+} else := "❌ FAILED"
+
+_explanation_resources := text if {
+	text := sprintf("RESOURCE CHANGES:\n  • Total: %d\n  • To Create: %d\n  • To Update: %d\n  • To Delete: %d%s", [
+		count(input.plan.resource_changes),
+		count(resources_to_create),
+		count(resources_to_update),
+		count(resources_to_delete),
+		_resource_details,
+	])
+}
+
+_resource_details := details if {
+	count(resources_to_delete) > 0
+	details := sprintf("\n\nRESOURCES TO DELETE:\n%s", [concat("\n", [
+		sprintf("  • %s (type: %s)", [resource.address, resource.type]) |
+		resource := resources_to_delete[_]
+	])])
+} else := ""
+
+_explanation_next_steps := text if {
+	text := sprintf("NEXT STEPS:\n%s", [concat("\n", [
+		sprintf("  %d. %s", [i + 1, step]) |
+		step := _next_steps[i]
+	])])
+}
+
+# ==============================================================================
+# SUMMARY (LEGACY - Kept for backwards compatibility)
 # ==============================================================================
 
 # Human-readable summary of policy evaluation
