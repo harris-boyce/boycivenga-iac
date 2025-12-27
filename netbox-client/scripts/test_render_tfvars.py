@@ -19,6 +19,100 @@ sys.path.insert(0, str(Path(__file__).parent))
 import render_tfvars  # noqa: E402
 
 
+def test_extract_status_value():
+    """Test status value extraction from NetBox format."""
+    # Test with NetBox API object format
+    status_obj = {"label": "Reserved", "value": "reserved"}
+    assert render_tfvars.extract_status_value(status_obj) == "reserved"
+
+    # Test with plain string format
+    assert render_tfvars.extract_status_value("active") == "active"
+
+    # Test with None
+    assert render_tfvars.extract_status_value(None) == "active"
+
+    # Test with deprecated status
+    status_deprecated = {"label": "Deprecated", "value": "deprecated"}
+    assert render_tfvars.extract_status_value(status_deprecated) == "deprecated"
+
+    print("✅ test_extract_status_value passed")
+
+
+def test_extract_vlan_id():
+    """Test VLAN ID extraction with validation."""
+    # Test with 'vid' field (NetBox API)
+    vlan_with_vid = {"vid": 10, "name": "Test VLAN", "site": "test-site"}
+    assert render_tfvars.extract_vlan_id(vlan_with_vid) == 10
+
+    # Test with 'vlan_id' field (minimal schema)
+    vlan_with_id = {"vlan_id": 20, "name": "Test VLAN", "site": "test-site"}
+    assert render_tfvars.extract_vlan_id(vlan_with_id) == 20
+
+    # Test with VLAN ID 0 (edge case, should work)
+    vlan_with_zero = {"vid": 0, "name": "Default VLAN", "site": "test-site"}
+    assert render_tfvars.extract_vlan_id(vlan_with_zero) == 0
+
+    # Test with null vlan_id (should raise ValueError)
+    vlan_null_id = {"vlan_id": None, "name": "Test VLAN", "site": "test-site"}
+    try:
+        render_tfvars.extract_vlan_id(vlan_null_id)
+        assert False, "Should have raised ValueError for null vlan_id"
+    except ValueError as e:
+        assert "no VLAN ID assigned" in str(e)
+
+    # Test with missing vlan_id (should raise ValueError)
+    vlan_missing_id = {"name": "Test VLAN", "site": "test-site"}
+    try:
+        render_tfvars.extract_vlan_id(vlan_missing_id)
+        assert False, "Should have raised ValueError for missing vlan_id"
+    except ValueError as e:
+        assert "no VLAN ID assigned" in str(e)
+
+    print("✅ test_extract_vlan_id passed")
+
+
+def test_extract_vlan_association():
+    """Test VLAN association extraction from prefix data."""
+    # Test with simple integer VLAN ID
+    prefix_simple = {"prefix": "10.0.0.0/24", "vlan": 10}
+    assert render_tfvars.extract_vlan_association(prefix_simple) == 10
+
+    # Test with VLAN ID 0 (edge case)
+    prefix_zero = {"prefix": "10.0.0.0/24", "vlan": 0}
+    assert render_tfvars.extract_vlan_association(prefix_zero) == 0
+
+    # Test with nested VLAN object (vid field)
+    prefix_nested_vid = {
+        "prefix": "10.0.0.0/24",
+        "vlan": {"vid": 20, "name": "Test VLAN"},
+    }
+    assert render_tfvars.extract_vlan_association(prefix_nested_vid) == 20
+
+    # Test with nested VLAN object (vlan_id field)
+    prefix_nested_id = {
+        "prefix": "10.0.0.0/24",
+        "vlan": {"vlan_id": 30, "name": "Test VLAN"},
+    }
+    assert render_tfvars.extract_vlan_association(prefix_nested_id) == 30
+
+    # Test with nested VLAN object with vid=0 (edge case)
+    prefix_nested_zero = {
+        "prefix": "10.0.0.0/24",
+        "vlan": {"vid": 0, "name": "Default VLAN"},
+    }
+    assert render_tfvars.extract_vlan_association(prefix_nested_zero) == 0
+
+    # Test with no VLAN association
+    prefix_no_vlan = {"prefix": "10.0.0.0/24"}
+    assert render_tfvars.extract_vlan_association(prefix_no_vlan) is None
+
+    # Test with null VLAN
+    prefix_null_vlan = {"prefix": "10.0.0.0/24", "vlan": None}
+    assert render_tfvars.extract_vlan_association(prefix_null_vlan) is None
+
+    print("✅ test_extract_vlan_association passed")
+
+
 def test_extract_site_slug():
     """Test site slug extraction logic."""
     # Test with slug field present
@@ -111,6 +205,72 @@ def test_render_site_tfvars():
     assert tag["color"] == "2196f3"
 
     print("✅ test_render_site_tfvars passed")
+
+
+def test_render_site_tfvars_with_netbox_status_objects():
+    """Test tfvars rendering with NetBox API status objects."""
+    site = {
+        "name": "Count Fleet Court",
+        "slug": "count-fleet-court",
+        "description": "Secondary family residence",
+    }
+
+    prefixes = [
+        {
+            "prefix": "10.2.10.0/24",
+            "vlan": {"vid": 10, "name": "CFC_Home_General"},
+            "description": "Home/General VLAN subnet",
+            "status": {"label": "Reserved", "value": "reserved"},
+        }
+    ]
+
+    vlans = [
+        {
+            "vid": 10,
+            "name": "CFC_Home_General",
+            "description": "Family devices",
+            "status": {"label": "Reserved", "value": "reserved"},
+        }
+    ]
+
+    tags = []
+
+    result = render_tfvars.render_site_tfvars(site, prefixes, vlans, tags)
+
+    # Validate status extraction
+    assert result["prefixes"][0]["status"] == "reserved"
+    assert result["vlans"][0]["status"] == "reserved"
+
+    # Validate VLAN ID extraction from nested object
+    assert result["prefixes"][0]["vlan_id"] == 10
+    assert result["vlans"][0]["vlan_id"] == 10
+
+    print("✅ test_render_site_tfvars_with_netbox_status_objects passed")
+
+
+def test_render_site_tfvars_with_null_vlan_id():
+    """Test that null VLAN ID raises clear error."""
+    site = {"name": "test-site", "slug": "test-site"}
+    prefixes = []
+    vlans = [
+        {
+            "vlan_id": None,
+            "name": "Test VLAN",
+            "description": "Test",
+            "status": "active",
+        }
+    ]
+    tags = []
+
+    try:
+        render_tfvars.render_site_tfvars(site, prefixes, vlans, tags)
+        assert False, "Should have raised ValueError for null vlan_id"
+    except ValueError as e:
+        error_msg = str(e)
+        assert "no VLAN ID assigned" in error_msg
+        assert "test-site" in error_msg
+
+    print("✅ test_render_site_tfvars_with_null_vlan_id passed")
 
 
 def test_deterministic_output():
@@ -257,8 +417,13 @@ def run_all_tests():
     print()
 
     test_functions = [
+        test_extract_status_value,
+        test_extract_vlan_id,
+        test_extract_vlan_association,
         test_extract_site_slug,
         test_render_site_tfvars,
+        test_render_site_tfvars_with_netbox_status_objects,
+        test_render_site_tfvars_with_null_vlan_id,
         test_deterministic_output,
         test_write_and_read_tfvars,
         test_load_netbox_export_from_file,

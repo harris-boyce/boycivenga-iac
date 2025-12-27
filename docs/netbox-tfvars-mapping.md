@@ -29,6 +29,72 @@ The script accepts NetBox data from two sources:
 2. **Single consolidated file** (like `intent-minimal-schema.json`):
    - Contains all sites, prefixes, vlans, and tags in one JSON file
 
+### NetBox API Compatibility
+
+The script handles both **minimal schema format** (simple values) and **NetBox API format** (nested objects):
+
+#### Status Fields
+NetBox API returns status as an object:
+```json
+{
+  "status": {
+    "label": "Reserved",
+    "value": "reserved"
+  }
+}
+```
+
+The script automatically extracts just the `value` field:
+```json
+{
+  "status": "reserved"
+}
+```
+
+#### VLAN ID Fields
+NetBox API may use `vid` instead of `vlan_id`. The script handles both:
+```json
+// NetBox API format
+{"vid": 10, "name": "Home LAN"}
+
+// Minimal schema format
+{"vlan_id": 10, "name": "Home LAN"}
+
+// Both convert to:
+{"vlan_id": 10, "name": "Home LAN"}
+```
+
+#### VLAN Associations in Prefixes
+Prefixes may reference VLANs as integers or nested objects:
+```json
+// Simple integer (minimal schema)
+{"prefix": "10.0.0.0/24", "vlan": 10}
+
+// Nested object (NetBox API)
+{"prefix": "10.0.0.0/24", "vlan": {"vid": 10, "name": "LAN"}}
+
+// Both extract to:
+{"cidr": "10.0.0.0/24", "vlan_id": 10}
+```
+
+### Validation and Error Handling
+
+The script enforces Terraform Input Contract requirements:
+
+**Required Fields:**
+- VLAN `vlan_id` must not be null or missing
+- If a VLAN has null `vlan_id`, the script fails with a clear error message:
+  ```
+  Error: VLAN 'CFC_Home_General' (site: count-fleet-court) has no VLAN ID assigned.
+  Please assign VLAN ID in NetBox before rendering.
+  ```
+
+**NetBox Data Requirements:**
+Before running the render script, ensure:
+- All VLANs have VLAN IDs assigned (not in "planned" status without IDs)
+- Site associations are properly configured
+- Network prefixes are defined if subnets are needed
+
 ### Output Structure
 
 The script generates one tfvars file per site:
@@ -70,11 +136,11 @@ Prefixes are grouped by site and included in the site's tfvars file.
 | NetBox Field | Terraform Variable | Description | Required |
 |-------------|-------------------|-------------|----------|
 | `prefix` | `prefixes[].cidr` | IP prefix in CIDR notation (e.g., 192.168.10.0/24) | Yes |
-| `vlan` | `prefixes[].vlan_id` | Associated VLAN ID | No |
+| `vlan` | `prefixes[].vlan_id` | Associated VLAN ID (integer or nested object) | No |
 | `description` | `prefixes[].description` | Prefix description | No |
-| `status` | `prefixes[].status` | Prefix status (active, reserved, etc.) | No |
+| `status` | `prefixes[].status` | Prefix status string (extracts `.value` from objects) | No |
 
-**Example:**
+**Example (Minimal Schema):**
 ```json
 // NetBox
 {
@@ -98,18 +164,50 @@ Prefixes are grouped by site and included in the site's tfvars file.
 }
 ```
 
+**Example (NetBox API Format):**
+```json
+// NetBox API
+{
+  "site": "count-fleet-court",
+  "prefix": "10.2.10.0/24",
+  "vlan": {
+    "vid": 10,
+    "name": "CFC_Home_General"
+  },
+  "description": "Home/General VLAN subnet",
+  "status": {
+    "label": "Reserved",
+    "value": "reserved"
+  }
+}
+
+// Terraform tfvars (status.value extracted, vlan.vid extracted)
+{
+  "prefixes": [
+    {
+      "cidr": "10.2.10.0/24",
+      "vlan_id": 10,
+      "description": "Home/General VLAN subnet",
+      "status": "reserved"
+    }
+  ]
+}
+```
+
 ### VLAN Fields
 
 VLANs are grouped by site and included in the site's tfvars file.
 
 | NetBox Field | Terraform Variable | Description | Required |
 |-------------|-------------------|-------------|----------|
-| `vlan_id` | `vlans[].vlan_id` | VLAN ID number (1-4094) | Yes |
+| `vlan_id` or `vid` | `vlans[].vlan_id` | VLAN ID number (1-4094) | **Yes** (must not be null) |
 | `name` | `vlans[].name` | VLAN name | Yes |
 | `description` | `vlans[].description` | VLAN description | No |
-| `status` | `vlans[].status` | VLAN status (active, reserved, etc.) | No |
+| `status` | `vlans[].status` | VLAN status string (extracts `.value` from objects) | No |
 
-**Example:**
+**Important:** VLANs must have VLAN IDs assigned. If a VLAN has `null` or missing `vlan_id`/`vid`, the script will fail with an error message indicating which VLAN and site need attention.
+
+**Example (Minimal Schema):**
 ```json
 // NetBox
 {
@@ -128,6 +226,33 @@ VLANs are grouped by site and included in the site's tfvars file.
       "name": "Home LAN",
       "description": "Default VLAN for primary residence",
       "status": "active"
+    }
+  ]
+}
+```
+
+**Example (NetBox API Format):**
+```json
+// NetBox API
+{
+  "site": "count-fleet-court",
+  "vid": 10,
+  "name": "CFC_Home_General",
+  "description": "Family devices, phones, tablets, printers",
+  "status": {
+    "label": "Reserved",
+    "value": "reserved"
+  }
+}
+
+// Terraform tfvars (vid → vlan_id, status.value extracted)
+{
+  "vlans": [
+    {
+      "vlan_id": 10,
+      "name": "CFC_Home_General",
+      "description": "Family devices, phones, tablets, printers",
+      "status": "reserved"
     }
   ]
 }
