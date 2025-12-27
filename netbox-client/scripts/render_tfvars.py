@@ -645,12 +645,32 @@ Output Files:
 
         site_vlans = filter_resources_by_site(all_vlans, site_slug, site_name, "vlan")
 
+        # Filter VLANs to only include those with corresponding prefixes
+        # This ensures Terraform contract compliance: each VLAN must have a network
+        prefix_vlan_ids = {
+            extract_vlan_association(p)
+            for p in site_prefixes
+            if extract_vlan_association(p) is not None
+        }
+        site_vlans_with_prefixes = [
+            v for v in site_vlans if extract_vlan_id(v) in prefix_vlan_ids
+        ]
+
+        if len(site_vlans_with_prefixes) < len(site_vlans):
+            skipped = len(site_vlans) - len(site_vlans_with_prefixes)
+            print(
+                f"  ⚠️  Skipping {skipped} VLAN(s) without prefix assignments "
+                f"(Terraform requires each VLAN to have a network)"
+            )
+
         print(f"  - {len(site_prefixes)} prefix(es)")
-        print(f"  - {len(site_vlans)} VLAN(s)")
+        print(f"  - {len(site_vlans_with_prefixes)} VLAN(s)")
         print(f"  - {len(all_tags)} tag(s) (shared)")
 
         # Render tfvars for this site
-        tfvars = render_site_tfvars(site, site_prefixes, site_vlans, all_tags)
+        tfvars = render_site_tfvars(
+            site, site_prefixes, site_vlans_with_prefixes, all_tags
+        )
 
         # Write to file
         # If slug already starts with "site-", don't add it again

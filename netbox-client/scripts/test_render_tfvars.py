@@ -608,6 +608,68 @@ def test_backward_compatibility_minimal_schema():
     print("✅ test_backward_compatibility_minimal_schema passed")
 
 
+def test_vlans_without_prefixes_filtered():
+    """Test that VLANs without prefixes are filtered out."""
+    test_data = {
+        "sites": [{"name": "test-site", "slug": "test-site"}],
+        "prefixes": [
+            # Only one prefix for VLAN 10
+            {
+                "site": "test-site",
+                "prefix": "10.0.0.0/24",
+                "vlan": 10,
+                "status": "active",
+            }
+        ],
+        "vlans": [
+            {"site": "test-site", "vlan_id": 10, "name": "LAN"},  # Has prefix
+            {"site": "test-site", "vlan_id": 20, "name": "GUEST"},  # No prefix
+            {"site": "test-site", "vlan_id": 30, "name": "MGMT"},  # No prefix
+        ],
+        "tags": [],
+    }
+
+    with tempfile.TemporaryDirectory() as tmpdir:
+        input_file = Path(tmpdir) / "input.json"
+
+        with open(input_file, "w") as f:
+            json.dump(test_data, f)
+
+        # Load data
+        loaded_data = render_tfvars.load_netbox_export(input_file=input_file)
+
+        # Build VLAN mapping
+        vlan_mapping = render_tfvars.build_vlan_site_mapping(loaded_data["vlans"])
+
+        # Filter prefixes and VLANs
+        site_prefixes = render_tfvars.filter_resources_by_site(
+            loaded_data["prefixes"], "test-site", "test-site", "prefix", vlan_mapping
+        )
+        site_vlans = render_tfvars.filter_resources_by_site(
+            loaded_data["vlans"], "test-site", "test-site", "vlan"
+        )
+
+        # Filter VLANs to only those with prefixes (simulating main() logic)
+        prefix_vlan_ids = {
+            render_tfvars.extract_vlan_association(p)
+            for p in site_prefixes
+            if render_tfvars.extract_vlan_association(p) is not None
+        }
+        site_vlans_with_prefixes = [
+            v for v in site_vlans if render_tfvars.extract_vlan_id(v) in prefix_vlan_ids
+        ]
+
+        # Should only have 1 VLAN (the one with a prefix)
+        assert len(site_vlans_with_prefixes) == 1
+        assert site_vlans_with_prefixes[0]["vlan_id"] == 10
+
+        # Verify 2 VLANs were filtered out
+        assert len(site_vlans) == 3  # All VLANs for site
+        assert len(site_vlans_with_prefixes) == 1  # Only those with prefixes
+
+    print("✅ test_vlans_without_prefixes_filtered passed")
+
+
 def run_all_tests():
     """Run all test functions."""
     print("=" * 70)
@@ -637,6 +699,7 @@ def run_all_tests():
         test_filter_resources_by_site_vlans,
         test_end_to_end_with_netbox_api_format,
         test_backward_compatibility_minimal_schema,
+        test_vlans_without_prefixes_filtered,
     ]
 
     passed = 0
