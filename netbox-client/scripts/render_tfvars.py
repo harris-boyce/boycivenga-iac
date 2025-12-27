@@ -220,7 +220,7 @@ def extract_site_slug(site_data: Dict[str, Any]) -> str:
     return site_data.get("slug", site_data.get("name", "unknown"))
 
 
-def extract_vlan_id(vlan_data: Dict[str, Any]) -> Optional[int]:
+def extract_vlan_id(vlan_data: Dict[str, Any]) -> int:
     """Extract VLAN ID from NetBox VLAN data.
 
     NetBox may use 'vid' or 'vlan_id' field for VLAN ID.
@@ -230,13 +230,15 @@ def extract_vlan_id(vlan_data: Dict[str, Any]) -> Optional[int]:
         vlan_data: VLAN dictionary from NetBox export
 
     Returns:
-        VLAN ID as integer, or None if not found
+        VLAN ID as integer
 
     Raises:
         ValueError: If VLAN ID is null or missing
     """
-    # Try both possible field names
-    vlan_id = vlan_data.get("vid") or vlan_data.get("vlan_id")
+    # Try both possible field names with explicit None checking
+    vlan_id = vlan_data.get("vid")
+    if vlan_id is None:
+        vlan_id = vlan_data.get("vlan_id")
 
     if vlan_id is None:
         # Extract site info for better error message
@@ -270,7 +272,11 @@ def extract_vlan_association(prefix_data: Dict[str, Any]) -> Optional[int]:
         return None
     elif isinstance(vlan, dict):
         # Nested VLAN object: {"vid": 10, "name": "LAN", ...}
-        return vlan.get("vid") or vlan.get("vlan_id")
+        # Try 'vid' first, then 'vlan_id', with explicit None checking
+        vlan_id = vlan.get("vid")
+        if vlan_id is None:
+            vlan_id = vlan.get("vlan_id")
+        return vlan_id
     elif isinstance(vlan, int):
         # Simple VLAN ID (from minimal schema)
         return vlan

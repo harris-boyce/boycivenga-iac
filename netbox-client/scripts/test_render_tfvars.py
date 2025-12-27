@@ -48,6 +48,10 @@ def test_extract_vlan_id():
     vlan_with_id = {"vlan_id": 20, "name": "Test VLAN", "site": "test-site"}
     assert render_tfvars.extract_vlan_id(vlan_with_id) == 20
 
+    # Test with VLAN ID 0 (edge case, should work)
+    vlan_with_zero = {"vid": 0, "name": "Default VLAN", "site": "test-site"}
+    assert render_tfvars.extract_vlan_id(vlan_with_zero) == 0
+
     # Test with null vlan_id (should raise ValueError)
     vlan_null_id = {"vlan_id": None, "name": "Test VLAN", "site": "test-site"}
     try:
@@ -73,6 +77,10 @@ def test_extract_vlan_association():
     prefix_simple = {"prefix": "10.0.0.0/24", "vlan": 10}
     assert render_tfvars.extract_vlan_association(prefix_simple) == 10
 
+    # Test with VLAN ID 0 (edge case)
+    prefix_zero = {"prefix": "10.0.0.0/24", "vlan": 0}
+    assert render_tfvars.extract_vlan_association(prefix_zero) == 0
+
     # Test with nested VLAN object (vid field)
     prefix_nested_vid = {
         "prefix": "10.0.0.0/24",
@@ -86,6 +94,13 @@ def test_extract_vlan_association():
         "vlan": {"vlan_id": 30, "name": "Test VLAN"},
     }
     assert render_tfvars.extract_vlan_association(prefix_nested_id) == 30
+
+    # Test with nested VLAN object with vid=0 (edge case)
+    prefix_nested_zero = {
+        "prefix": "10.0.0.0/24",
+        "vlan": {"vid": 0, "name": "Default VLAN"},
+    }
+    assert render_tfvars.extract_vlan_association(prefix_nested_zero) == 0
 
     # Test with no VLAN association
     prefix_no_vlan = {"prefix": "10.0.0.0/24"}
