@@ -38,16 +38,16 @@ NetBox Field Mapping to Terraform Variables:
     Prefixes (grouped by site):
         NetBox field → Terraform variable
         - prefix → prefixes[].cidr
-        - vlan → prefixes[].vlan_id
+        - vlan (int or nested object) → prefixes[].vlan_id
         - description → prefixes[].description
-        - status → prefixes[].status
+        - status (string or object.value) → prefixes[].status
 
     VLANs (grouped by site):
         NetBox field → Terraform variable
-        - vlan_id → vlans[].vlan_id
+        - vlan_id or vid → vlans[].vlan_id (REQUIRED, must not be null)
         - name → vlans[].name
         - description → vlans[].description
-        - status → vlans[].status
+        - status (string or object.value) → vlans[].status
 
     Tags (included in all site files):
         NetBox field → Terraform variable
@@ -56,6 +56,20 @@ NetBox Field Mapping to Terraform Variables:
         - description → tags[].description
         - color → tags[].color
 
+NetBox API Compatibility:
+    This script handles both minimal schema format (simple values) and
+    NetBox API format (nested objects):
+
+    - Status fields: Extracts 'value' from {"label": "Reserved", "value": "reserved"}
+    - VLAN IDs: Handles both 'vid' and 'vlan_id' field names
+    - VLAN associations: Handles both integers and nested VLAN objects
+
+Validation:
+    The script enforces Terraform Input Contract requirements:
+    - VLAN IDs must not be null (raises ValueError with clear message)
+    - Status values are extracted from objects if necessary
+    - All output conforms to schema in docs/phase4/terraform-input-contract.md
+
 Environment Variables:
     None required. This script operates on local files.
 
@@ -63,7 +77,8 @@ Features:
     - Deterministic output: Same input always produces same output
     - Sorted keys: JSON keys are sorted for consistency
     - Site isolation: Each site gets its own tfvars file
-    - Validation: Verifies required fields are present
+    - Validation: Verifies required fields are present and valid
+    - Clear error messages: Indicates which site/VLAN has issues
 """
 
 import argparse
