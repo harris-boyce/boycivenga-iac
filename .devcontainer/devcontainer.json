@@ -1,17 +1,18 @@
 {
   "name": "IaC DevContainer",
   "build": {
-    "dockerfile": "Dockerfile"
+    "dockerfile": "Dockerfile",
+    "cacheFrom": "ghcr.io/harris-boyce/boycivenga-iac/devcontainer:latest"
   },
   "features": {
     "ghcr.io/devcontainers/features/docker-in-docker:2": {},
     "ghcr.io/devcontainers/features/terraform:1": {},
-    "ghcr.io/devcontainers/features/python:1": {
-      "version": "latest"
-    },
     "ghcr.io/devcontainers/features/github-cli:1": {}
   },
-  "postCreateCommand": "bash -c 'pip install pre-commit && (pre-commit install 2>/dev/null || echo \"Info: pre-commit installed but not configured (add .pre-commit-config.yaml when ready)\")'",
+  "postStartCommand": "pre-commit install 2>/dev/null || echo 'Info: pre-commit installed but not configured (add .pre-commit-config.yaml when ready)'",
+  "mounts": [
+    "source=/var/lib/docker,target=/var/lib/docker,type=volume"
+  ],
   "customizations": {
     "vscode": {
       "extensions": [
@@ -19,7 +20,8 @@
         "hashicorp.terraform",
         "redhat.vscode-yaml",
         "yzhang.markdown-all-in-one",
-        "github.codespaces"
+        "github.codespaces",
+        "anthropic.claude-code"
       ]
     }
   },
