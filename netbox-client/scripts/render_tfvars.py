@@ -70,7 +70,7 @@ import argparse
 import json
 import sys
 from pathlib import Path
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Optional
 
 
 def load_json_file(file_path: Path) -> Dict[str, Any]:
@@ -166,6 +166,31 @@ def load_netbox_export(
         raise ValueError("Either input_dir or input_file must be provided")
 
 
+def extract_status_value(status: Any) -> str:
+    """Extract status value from NetBox status field.
+
+    NetBox API returns status as an object with 'label' and 'value' fields.
+    This function extracts just the 'value' string for Terraform compatibility.
+
+    Args:
+        status: Status field from NetBox (can be string or dict)
+
+    Returns:
+        Status string value (e.g., "active", "reserved", "deprecated")
+    """
+    if status is None:
+        return "active"
+    elif isinstance(status, dict):
+        # NetBox API format: {"label": "Reserved", "value": "reserved"}
+        return status.get("value", "active")
+    elif isinstance(status, str):
+        # Already a string (from minimal schema or simplified export)
+        return status
+    else:
+        # Fallback for unexpected types
+        return "active"
+
+
 def extract_site_slug(site_data: Dict[str, Any]) -> str:
     """Extract site slug from site data.
 
@@ -178,6 +203,64 @@ def extract_site_slug(site_data: Dict[str, Any]) -> str:
         Site slug string
     """
     return site_data.get("slug", site_data.get("name", "unknown"))
+
+
+def extract_vlan_id(vlan_data: Dict[str, Any]) -> Optional[int]:
+    """Extract VLAN ID from NetBox VLAN data.
+
+    NetBox may use 'vid' or 'vlan_id' field for VLAN ID.
+    This function tries both field names.
+
+    Args:
+        vlan_data: VLAN dictionary from NetBox export
+
+    Returns:
+        VLAN ID as integer, or None if not found
+
+    Raises:
+        ValueError: If VLAN ID is null or missing
+    """
+    # Try both possible field names
+    vlan_id = vlan_data.get("vid") or vlan_data.get("vlan_id")
+
+    if vlan_id is None:
+        # Extract site info for better error message
+        site = vlan_data.get("site", "unknown")
+        if isinstance(site, dict):
+            site = site.get("slug", site.get("name", "unknown"))
+
+        raise ValueError(
+            f"VLAN '{vlan_data.get('name', 'unnamed')}' "
+            f"(site: {site}) has no VLAN ID assigned. "
+            f"Please assign VLAN ID in NetBox before rendering."
+        )
+
+    return int(vlan_id)
+
+
+def extract_vlan_association(prefix_data: Dict[str, Any]) -> Optional[int]:
+    """Extract VLAN ID from prefix's VLAN association.
+
+    Handles both simple VLAN ID (integer) and nested VLAN object.
+
+    Args:
+        prefix_data: Prefix dictionary from NetBox export
+
+    Returns:
+        VLAN ID as integer, or None if not associated
+    """
+    vlan = prefix_data.get("vlan")
+
+    if vlan is None:
+        return None
+    elif isinstance(vlan, dict):
+        # Nested VLAN object: {"vid": 10, "name": "LAN", ...}
+        return vlan.get("vid") or vlan.get("vlan_id")
+    elif isinstance(vlan, int):
+        # Simple VLAN ID (from minimal schema)
+        return vlan
+    else:
+        return None
 
 
 def render_site_tfvars(
@@ -208,23 +291,32 @@ def render_site_tfvars(
     tfvars["prefixes"] = [
         {
             "cidr": prefix.get("prefix", ""),
-            "vlan_id": prefix.get("vlan", None),  # Can be None if not associated
+            "vlan_id": extract_vlan_association(prefix),
             "description": prefix.get("description", ""),
-            "status": prefix.get("status", "active"),
+            "status": extract_status_value(prefix.get("status")),
         }
         for prefix in prefixes
     ]
 
-    # Map VLANs
-    tfvars["vlans"] = [
-        {
-            "vlan_id": vlan.get("vlan_id", None),  # Should not be None
-            "name": vlan.get("name", ""),
-            "description": vlan.get("description", ""),
-            "status": vlan.get("status", "active"),
-        }
-        for vlan in vlans
-    ]
+    # Map VLANs with validation
+    tfvars_vlans = []
+    for vlan in vlans:
+        try:
+            vlan_id = extract_vlan_id(vlan)
+            tfvars_vlans.append(
+                {
+                    "vlan_id": vlan_id,
+                    "name": vlan.get("name", ""),
+                    "description": vlan.get("description", ""),
+                    "status": extract_status_value(vlan.get("status")),
+                }
+            )
+        except ValueError as e:
+            # Re-raise with context about which site is being processed
+            site_name = site.get("name", "unknown")
+            raise ValueError(f"Error processing site '{site_name}': {e}") from e
+
+    tfvars["vlans"] = tfvars_vlans
 
     # Map tags (same for all sites)
     tfvars["tags"] = [
