@@ -284,6 +284,166 @@ def extract_vlan_association(prefix_data: Dict[str, Any]) -> Optional[int]:
         return None
 
 
+def build_vlan_site_mapping(all_vlans: List[Dict[str, Any]]) -> Dict[int, str]:
+    """Build a mapping of VLAN ID to site slug.
+
+    This mapping is used to determine which site a prefix belongs to
+    based on its VLAN association, since NetBox API prefix objects
+    do not include a direct 'site' field.
+
+    Args:
+        all_vlans: List of all VLANs from NetBox export
+
+    Returns:
+        Dictionary mapping VLAN ID (int) to site slug (str)
+        Example: {10: "pennington", 20: "count-fleet-court"}
+
+    Note:
+        - Handles both NetBox API format (nested site object) and
+          minimal schema format (simple site string)
+        - VLANs without site associations are skipped
+        - Duplicate VLAN IDs across sites are logged as warnings
+    """
+    mapping = {}
+
+    for vlan in all_vlans:
+        # Extract VLAN ID (handles both 'vid' and 'vlan_id')
+        try:
+            vlan_id = extract_vlan_id(vlan)
+        except ValueError:
+            # Skip VLANs with null/missing VLAN ID
+            continue
+
+        # Extract site slug
+        vlan_site = vlan.get("site")
+        site_slug = None
+
+        if isinstance(vlan_site, dict):
+            # NetBox API format: {"id": 52, "slug": "pennington", ...}
+            site_slug = vlan_site.get("slug", vlan_site.get("name"))
+        elif isinstance(vlan_site, str):
+            # Minimal schema format: "pennington"
+            site_slug = vlan_site
+
+        if site_slug:
+            # Check for VLAN ID collisions across sites
+            if vlan_id in mapping and mapping[vlan_id] != site_slug:
+                print(
+                    f"⚠️  Warning: VLAN ID {vlan_id} exists in multiple sites: "
+                    f"{mapping[vlan_id]} and {site_slug}"
+                )
+            mapping[vlan_id] = site_slug
+
+    return mapping
+
+
+def extract_prefix_site(
+    prefix: Dict[str, Any], vlan_site_mapping: Dict[int, str]
+) -> Optional[str]:
+    """Extract the site slug for a prefix.
+
+    Tries multiple methods in order:
+    1. Direct 'site' field (minimal schema compatibility)
+    2. VLAN association lookup (NetBox API format)
+
+    Args:
+        prefix: Prefix dictionary from NetBox export
+        vlan_site_mapping: VLAN ID → site slug mapping
+
+    Returns:
+        Site slug string, or None if site cannot be determined
+    """
+    # Method 1: Check for direct site field (minimal schema format)
+    prefix_site = prefix.get("site")
+    if prefix_site:
+        if isinstance(prefix_site, dict):
+            return prefix_site.get("slug", prefix_site.get("name"))
+        elif isinstance(prefix_site, str):
+            return prefix_site
+
+    # Method 2: Look up via VLAN association (NetBox API format)
+    vlan_id = extract_vlan_association(prefix)
+    if vlan_id is not None:
+        return vlan_site_mapping.get(vlan_id)
+
+    # No site could be determined
+    return None
+
+
+def filter_resources_by_site(
+    resources: List[Dict[str, Any]],
+    site_slug: str,
+    site_name: str,
+    resource_type: str,
+    vlan_site_mapping: Optional[Dict[int, str]] = None,
+) -> List[Dict[str, Any]]:
+    """Filter resources (prefixes or VLANs) by site.
+
+    Handles both NetBox API format (nested objects) and minimal schema format
+    (simple strings). For prefixes, uses VLAN association to determine site.
+
+    Args:
+        resources: List of resource dictionaries
+        site_slug: Site slug to filter by
+        site_name: Site name to filter by (fallback)
+        resource_type: Type of resource ("prefix" or "vlan")
+        vlan_site_mapping: VLAN ID → site mapping (required for prefixes)
+
+    Returns:
+        Filtered list of resources belonging to the specified site
+    """
+    filtered = []
+    unmatched = []
+
+    for resource in resources:
+        resource_site_slug = None
+
+        if resource_type == "prefix":
+            # Use VLAN-based matching for prefixes
+            if vlan_site_mapping is None:
+                raise ValueError("vlan_site_mapping required for prefix filtering")
+            resource_site_slug = extract_prefix_site(resource, vlan_site_mapping)
+        else:
+            # Direct site field for VLANs
+            resource_site = resource.get("site")
+            if isinstance(resource_site, dict):
+                resource_site_slug = resource_site.get(
+                    "slug", resource_site.get("name")
+                )
+            else:
+                resource_site_slug = resource_site
+
+        # Match against site slug or name
+        if resource_site_slug == site_slug or resource_site_slug == site_name:
+            filtered.append(resource)
+        elif resource_site_slug is None:
+            unmatched.append(resource)
+
+    # Log unmatched resources for debugging
+    if unmatched:
+        print(f"  ⚠️  {len(unmatched)} {resource_type}(s) without site association:")
+        for res in unmatched[:3]:  # Show first 3
+            if resource_type == "prefix":
+                vlan_id = extract_vlan_association(res)
+                print(
+                    f"     - {res.get('prefix', 'unknown')}: "
+                    f"VLAN={vlan_id}, "
+                    f'desc="{res.get("description", "")[:40]}"'
+                )
+            else:
+                try:
+                    vlan_id_val = extract_vlan_id(res)
+                    print(
+                        f"     - VLAN {vlan_id_val}: " f"{res.get('name', 'unnamed')}"
+                    )
+                except ValueError:
+                    print(f"     - VLAN ?: {res.get('name', 'unnamed')}")
+        if len(unmatched) > 3:
+            print(f"     ... and {len(unmatched) - 3} more")
+
+    return filtered
+
+
 def render_site_tfvars(
     site: Dict[str, Any],
     prefixes: List[Dict[str, Any]],
@@ -461,6 +621,12 @@ Output Files:
         print(f"❌ Error creating output directory: {e}")
         sys.exit(1)
 
+    # Build VLAN → Site mapping for prefix-to-site matching
+    print("🔗 Building VLAN → Site mapping...")
+    vlan_site_mapping = build_vlan_site_mapping(all_vlans)
+    print(f"   Mapped {len(vlan_site_mapping)} VLAN(s) to sites")
+    print()
+
     # Generate tfvars file for each site
     print("🔨 Generating tfvars files...")
     print()
@@ -472,32 +638,12 @@ Output Files:
 
         print(f"Processing site: {site_name} ({site_slug})")
 
-        # Filter prefixes and VLANs for this site
-        # NetBox export may have 'site' field (from minimal schema)
-        # or nested 'site' object (from API)
-        site_prefixes = []
-        for prefix in all_prefixes:
-            prefix_site = prefix.get("site")
-            # Handle both string (minimal schema) and object (API export)
-            if isinstance(prefix_site, dict):
-                prefix_site_slug = prefix_site.get("slug", prefix_site.get("name"))
-            else:
-                prefix_site_slug = prefix_site
+        # Filter prefixes and VLANs for this site using VLAN-based matching
+        site_prefixes = filter_resources_by_site(
+            all_prefixes, site_slug, site_name, "prefix", vlan_site_mapping
+        )
 
-            if prefix_site_slug == site_slug or prefix_site_slug == site_name:
-                site_prefixes.append(prefix)
-
-        site_vlans = []
-        for vlan in all_vlans:
-            vlan_site = vlan.get("site")
-            # Handle both string (minimal schema) and object (API export)
-            if isinstance(vlan_site, dict):
-                vlan_site_slug = vlan_site.get("slug", vlan_site.get("name"))
-            else:
-                vlan_site_slug = vlan_site
-
-            if vlan_site_slug == site_slug or vlan_site_slug == site_name:
-                site_vlans.append(vlan)
+        site_vlans = filter_resources_by_site(all_vlans, site_slug, site_name, "vlan")
 
         print(f"  - {len(site_prefixes)} prefix(es)")
         print(f"  - {len(site_vlans)} VLAN(s)")
