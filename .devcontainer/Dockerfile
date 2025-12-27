@@ -1,5 +1,8 @@
-FROM mcr.microsoft.com/devcontainers/base:ubuntu
+FROM mcr.microsoft.com/devcontainers/python:3-bullseye
 
-# Additional tools can be installed here for customization
-# The devcontainer features provide: Docker, Terraform, Python, GitHub CLI
-# Example: RUN apt-get update && apt-get install -y your-tool && rm -rf /var/lib/apt/lists/*
+# This image includes Python and Node.js pre-installed for faster builds
+# Additional features are added via devcontainer.json for Docker, Terraform, and GitHub CLI
+
+# Install Python and Node packages at build time for better caching
+RUN pip install --no-cache-dir pre-commit \
+    && npm install -g @anthropic-ai/claude-code
