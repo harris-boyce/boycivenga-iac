@@ -297,17 +297,18 @@ def extract_vlan_association(prefix_data: Dict[str, Any]) -> Optional[int]:
     if vlan is None:
         return None
     elif isinstance(vlan, dict):
-        # NetBox API format: prefer internal 'id' over 'vid'
+        # NetBox API format: require internal 'id'
         # Internal ID is unique across all VLANs, VID can be reused across sites
         vlan_internal_id = vlan.get("id")
         if vlan_internal_id is not None:
             return vlan_internal_id
-        # Fallback to VID for backwards compatibility
-        # (shouldn't happen with real NetBox data)
-        vlan_id = vlan.get("vid")
-        if vlan_id is None:
-            vlan_id = vlan.get("vlan_id")
-        return vlan_id
+        # Do not fall back to VID here; that would reintroduce VLAN collisions
+        # when the same VID is reused across multiple sites.
+        raise ValueError(
+            f"VLAN association for prefix {prefix_data.get('prefix', '<unknown>')} "
+            "is a dict without an internal 'id'. Internal VLAN IDs are required "
+            "for mapping; please ensure NetBox exports include VLAN 'id' fields."
+        )
     elif isinstance(vlan, int):
         # Minimal schema format: integer as-is for backwards compatibility
         return vlan
