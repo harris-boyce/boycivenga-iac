@@ -410,37 +410,45 @@ def test_json_keys_are_sorted():
 
 
 def test_build_vlan_site_mapping():
-    """Test VLAN to site mapping construction."""
+    """Test VLAN to site mapping construction using internal IDs."""
     vlans = [
-        {"vid": 10, "site": {"slug": "site-a", "name": "Site A"}},
-        {"vid": 20, "site": {"slug": "site-b", "name": "Site B"}},
-        {"vid": 30, "site": "site-a"},  # Minimal schema format
-        {"vid": 40, "site": None},  # No site
+        {"id": 180, "vid": 10, "site": {"slug": "site-a", "name": "Site A"}},
+        {"id": 181, "vid": 20, "site": {"slug": "site-b", "name": "Site B"}},
+        {"id": 182, "vid": 30, "site": "site-a"},  # Minimal schema format
+        {"id": 183, "vid": 40, "site": None},  # No site
     ]
 
     mapping = render_tfvars.build_vlan_site_mapping(vlans)
 
-    assert mapping[10] == "site-a"
-    assert mapping[20] == "site-b"
-    assert mapping[30] == "site-a"
-    assert 40 not in mapping  # VLAN without site excluded
+    # Should use internal IDs (180, 181, 182), not VIDs (10, 20, 30)
+    assert 180 in mapping
+    assert 181 in mapping
+    assert 182 in mapping
+    assert mapping[180] == "site-a"
+    assert mapping[181] == "site-b"
+    assert mapping[182] == "site-a"
+    assert 183 not in mapping  # VLAN without site excluded
 
     print("✅ test_build_vlan_site_mapping passed")
 
 
 def test_build_vlan_site_mapping_with_collisions():
-    """Test VLAN mapping handles ID collisions."""
+    """Test VLAN mapping detects VID collisions across sites."""
     vlans = [
-        {"vid": 10, "site": {"slug": "site-a"}},
-        {"vid": 10, "site": {"slug": "site-b"}},  # Same VLAN ID
+        {"id": 180, "vid": 10, "site": {"slug": "site-a"}},
+        {"id": 187, "vid": 10, "site": {"slug": "site-b"}},  # Same VID, different site
     ]
 
-    # Should log warning but not crash
-    mapping = render_tfvars.build_vlan_site_mapping(vlans)
-
-    # One of them should be in the mapping (last one wins)
-    assert 10 in mapping
-    assert mapping[10] in ["site-a", "site-b"]
+    # Should raise ValueError for VID collision across sites
+    try:
+        render_tfvars.build_vlan_site_mapping(vlans)
+        assert False, "Should have raised ValueError for VID collision"
+    except ValueError as e:
+        error_msg = str(e)
+        assert "collision" in error_msg.lower()
+        assert "VID 10" in error_msg
+        assert "site-a" in error_msg
+        assert "site-b" in error_msg
 
     print("✅ test_build_vlan_site_mapping_with_collisions passed")
 
@@ -532,6 +540,7 @@ def test_end_to_end_with_netbox_api_format():
         "sites": [{"name": "Pennington", "slug": "pennington"}],
         "vlans": [
             {
+                "id": 180,
                 "vid": 10,
                 "name": "LAN",
                 "site": {"slug": "pennington", "name": "Pennington"},
@@ -540,7 +549,7 @@ def test_end_to_end_with_netbox_api_format():
         "prefixes": [
             {
                 "prefix": "10.1.10.0/24",
-                "vlan": {"vid": 10, "name": "LAN"},
+                "vlan": {"id": 180, "vid": 10, "name": "LAN"},
                 "description": "Home network",
                 "status": {"value": "active"},
             }

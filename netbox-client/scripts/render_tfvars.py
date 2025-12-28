@@ -220,6 +220,25 @@ def extract_site_slug(site_data: Dict[str, Any]) -> str:
     return site_data.get("slug", site_data.get("name", "unknown"))
 
 
+def extract_site_from_vlan(vlan_data: Dict[str, Any]) -> Optional[str]:
+    """Extract site slug from VLAN data.
+
+    Handles both NetBox API format (nested object) and minimal schema (string).
+
+    Args:
+        vlan_data: VLAN dictionary from NetBox export
+
+    Returns:
+        Site slug string, or None if site cannot be determined
+    """
+    vlan_site = vlan_data.get("site")
+    if isinstance(vlan_site, dict):
+        return vlan_site.get("slug", vlan_site.get("name"))
+    elif isinstance(vlan_site, str):
+        return vlan_site
+    return None
+
+
 def extract_vlan_id(vlan_data: Dict[str, Any]) -> int:
     """Extract VLAN ID from NetBox VLAN data.
 
@@ -256,83 +275,119 @@ def extract_vlan_id(vlan_data: Dict[str, Any]) -> int:
 
 
 def extract_vlan_association(prefix_data: Dict[str, Any]) -> Optional[int]:
-    """Extract VLAN ID from prefix's VLAN association.
+    """Extract VLAN internal ID from prefix's VLAN association.
 
-    Handles both simple VLAN ID (integer) and nested VLAN object.
+    Returns NetBox internal VLAN ID (not VID). This ID is unique across
+    all VLANs and is used for site mapping.
+
+    Handles both:
+    - Nested VLAN object: {"id": 180, "vid": 10, "name": "LAN"}
+      (NetBox API format - uses internal 'id' field)
+    - Simple integer: 10 (minimal schema format - treated as-is for
+      backwards compatibility)
 
     Args:
         prefix_data: Prefix dictionary from NetBox export
 
     Returns:
-        VLAN ID as integer, or None if not associated
+        VLAN internal ID as integer, or None if not associated
     """
     vlan = prefix_data.get("vlan")
 
     if vlan is None:
         return None
     elif isinstance(vlan, dict):
-        # Nested VLAN object: {"vid": 10, "name": "LAN", ...}
-        # Try 'vid' first, then 'vlan_id', with explicit None checking
+        # NetBox API format: prefer internal 'id' over 'vid'
+        # Internal ID is unique across all VLANs, VID can be reused across sites
+        vlan_internal_id = vlan.get("id")
+        if vlan_internal_id is not None:
+            return vlan_internal_id
+        # Fallback to VID for backwards compatibility
+        # (shouldn't happen with real NetBox data)
         vlan_id = vlan.get("vid")
         if vlan_id is None:
             vlan_id = vlan.get("vlan_id")
         return vlan_id
     elif isinstance(vlan, int):
-        # Simple VLAN ID (from minimal schema)
+        # Minimal schema format: integer as-is for backwards compatibility
         return vlan
     else:
         return None
 
 
 def build_vlan_site_mapping(all_vlans: List[Dict[str, Any]]) -> Dict[int, str]:
-    """Build a mapping of VLAN ID to site slug.
+    """Build a mapping of VLAN internal ID to site slug.
 
     This mapping is used to determine which site a prefix belongs to
     based on its VLAN association, since NetBox API prefix objects
     do not include a direct 'site' field.
 
+    Uses NetBox internal VLAN 'id' field (unique across all VLANs) instead of
+    'vid' (VLAN tag, which can be reused across sites). This prevents prefix
+    assignment errors when multiple sites use the same VLAN tag.
+
     Args:
         all_vlans: List of all VLANs from NetBox export
 
     Returns:
-        Dictionary mapping VLAN ID (int) to site slug (str)
-        Example: {10: "pennington", 20: "count-fleet-court"}
+        Dictionary mapping VLAN internal ID (int) to site slug (str)
+        Example: {180: "pennington", 187: "count-fleet-court"}
+
+    Raises:
+        ValueError: If VLAN VID collisions detected across sites
 
     Note:
         - Handles both NetBox API format (nested site object) and
           minimal schema format (simple site string)
         - VLANs without site associations are skipped
-        - Duplicate VLAN IDs across sites are logged as warnings
+        - VID collisions across sites are treated as errors
     """
     mapping = {}
 
+    # First pass: Build mapping using internal VLAN IDs
     for vlan in all_vlans:
-        # Extract VLAN ID (handles both 'vid' and 'vlan_id')
-        try:
-            vlan_id = extract_vlan_id(vlan)
-        except ValueError:
-            # Skip VLANs with null/missing VLAN ID
+        # Extract NetBox internal VLAN ID (unique across all VLANs)
+        vlan_internal_id = vlan.get("id")
+        if vlan_internal_id is None:
+            # Skip VLANs without internal ID (minimal schema or legacy data)
             continue
 
         # Extract site slug
-        vlan_site = vlan.get("site")
-        site_slug = None
-
-        if isinstance(vlan_site, dict):
-            # NetBox API format: {"id": 52, "slug": "pennington", ...}
-            site_slug = vlan_site.get("slug", vlan_site.get("name"))
-        elif isinstance(vlan_site, str):
-            # Minimal schema format: "pennington"
-            site_slug = vlan_site
+        site_slug = extract_site_from_vlan(vlan)
 
         if site_slug:
-            # Check for VLAN ID collisions across sites
-            if vlan_id in mapping and mapping[vlan_id] != site_slug:
-                print(
-                    f"⚠️  Warning: VLAN ID {vlan_id} exists in multiple sites: "
-                    f"{mapping[vlan_id]} and {site_slug}"
-                )
-            mapping[vlan_id] = site_slug
+            mapping[vlan_internal_id] = site_slug
+
+    # Second pass: Detect VID collisions across sites
+    vid_to_sites = {}
+    for vlan in all_vlans:
+        # Extract VLAN VID (tag)
+        try:
+            vlan_vid = extract_vlan_id(vlan)
+        except ValueError:
+            # Skip VLANs with null/missing VID
+            continue
+
+        # Extract site slug
+        site_slug = extract_site_from_vlan(vlan)
+        if not site_slug:
+            continue
+
+        if vlan_vid not in vid_to_sites:
+            vid_to_sites[vlan_vid] = set()
+        vid_to_sites[vlan_vid].add(site_slug)
+
+    # Check for VID collisions across sites
+    collisions = {vid: sites for vid, sites in vid_to_sites.items() if len(sites) > 1}
+    if collisions:
+        error_msg = "VLAN VID collision detected across sites:\n"
+        for vid, sites in sorted(collisions.items()):
+            error_msg += f"  - VID {vid} exists in sites: {', '.join(sorted(sites))}\n"
+        error_msg += (
+            "\nVLAN VIDs must be unique per site. "
+            "Please resolve these conflicts in NetBox before rendering."
+        )
+        raise ValueError(error_msg)
 
     return mapping
 
