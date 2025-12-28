@@ -220,6 +220,25 @@ def extract_site_slug(site_data: Dict[str, Any]) -> str:
     return site_data.get("slug", site_data.get("name", "unknown"))
 
 
+def extract_site_from_vlan(vlan_data: Dict[str, Any]) -> Optional[str]:
+    """Extract site slug from VLAN data.
+
+    Handles both NetBox API format (nested object) and minimal schema (string).
+
+    Args:
+        vlan_data: VLAN dictionary from NetBox export
+
+    Returns:
+        Site slug string, or None if site cannot be determined
+    """
+    vlan_site = vlan_data.get("site")
+    if isinstance(vlan_site, dict):
+        return vlan_site.get("slug", vlan_site.get("name"))
+    elif isinstance(vlan_site, str):
+        return vlan_site
+    return None
+
+
 def extract_vlan_id(vlan_data: Dict[str, Any]) -> int:
     """Extract VLAN ID from NetBox VLAN data.
 
@@ -256,99 +275,100 @@ def extract_vlan_id(vlan_data: Dict[str, Any]) -> int:
 
 
 def extract_vlan_association(prefix_data: Dict[str, Any]) -> Optional[int]:
-    """Extract VLAN ID from prefix's VLAN association.
+    """Extract VLAN VID from prefix's VLAN association.
 
-    Handles both simple VLAN ID (integer) and nested VLAN object.
+    Returns VLAN VID (the actual VLAN tag like 10, 20, 30) which is used
+    in Terraform tfvars output. VIDs can be reused across sites.
+
+    Handles both:
+    - Nested VLAN object: {"id": 180, "vid": 10, "name": "LAN"}
+      (NetBox API format - extracts 'vid' field)
+    - Simple integer: 10 (minimal schema format)
 
     Args:
         prefix_data: Prefix dictionary from NetBox export
 
     Returns:
-        VLAN ID as integer, or None if not associated
+        VLAN VID as integer, or None if not associated
     """
     vlan = prefix_data.get("vlan")
 
     if vlan is None:
         return None
     elif isinstance(vlan, dict):
-        # Nested VLAN object: {"vid": 10, "name": "LAN", ...}
-        # Try 'vid' first, then 'vlan_id', with explicit None checking
-        vlan_id = vlan.get("vid")
-        if vlan_id is None:
-            vlan_id = vlan.get("vlan_id")
-        return vlan_id
+        # NetBox API format: extract VID from nested object
+        vlan_vid = vlan.get("vid")
+        if vlan_vid is None:
+            vlan_vid = vlan.get("vlan_id")
+        return vlan_vid
     elif isinstance(vlan, int):
-        # Simple VLAN ID (from minimal schema)
+        # Minimal schema format: integer is the VID
         return vlan
     else:
         return None
 
 
-def build_vlan_site_mapping(all_vlans: List[Dict[str, Any]]) -> Dict[int, str]:
-    """Build a mapping of VLAN ID to site slug.
+def build_vlan_site_mapping(
+    all_vlans: List[Dict[str, Any]],
+) -> Dict[tuple[str, int], str]:
+    """Build a mapping of (site_slug, VLAN VID) to site slug.
 
     This mapping is used to determine which site a prefix belongs to
     based on its VLAN association, since NetBox API prefix objects
     do not include a direct 'site' field.
 
+    Uses composite keys (site_slug, vid) which naturally handles the common
+    case where multiple sites use the same VLAN VIDs (e.g., both sites having
+    VLAN 10 for their LAN). This is a valid network design since VLANs are
+    layer-2 constructs isolated per site.
+
     Args:
         all_vlans: List of all VLANs from NetBox export
 
     Returns:
-        Dictionary mapping VLAN ID (int) to site slug (str)
-        Example: {10: "pennington", 20: "count-fleet-court"}
+        Dictionary mapping (site_slug, vid) tuple to site slug
+        Example: {("pennington", 10): "pennington",
+                  ("countfleetcourt", 10): "countfleetcourt"}
 
     Note:
         - Handles both NetBox API format (nested site object) and
           minimal schema format (simple site string)
-        - VLANs without site associations are skipped
-        - Duplicate VLAN IDs across sites are logged as warnings
+        - VLANs without site associations or VIDs are skipped
+        - Same VID can exist at multiple sites (this is normal and valid)
     """
     mapping = {}
 
     for vlan in all_vlans:
-        # Extract VLAN ID (handles both 'vid' and 'vlan_id')
-        try:
-            vlan_id = extract_vlan_id(vlan)
-        except ValueError:
-            # Skip VLANs with null/missing VLAN ID
+        # Extract site slug
+        site_slug = extract_site_from_vlan(vlan)
+        if not site_slug:
             continue
 
-        # Extract site slug
-        vlan_site = vlan.get("site")
-        site_slug = None
+        # Extract VLAN VID
+        try:
+            vlan_vid = extract_vlan_id(vlan)
+        except ValueError:
+            # Skip VLANs with null/missing VID
+            continue
 
-        if isinstance(vlan_site, dict):
-            # NetBox API format: {"id": 52, "slug": "pennington", ...}
-            site_slug = vlan_site.get("slug", vlan_site.get("name"))
-        elif isinstance(vlan_site, str):
-            # Minimal schema format: "pennington"
-            site_slug = vlan_site
-
-        if site_slug:
-            # Check for VLAN ID collisions across sites
-            if vlan_id in mapping and mapping[vlan_id] != site_slug:
-                print(
-                    f"⚠️  Warning: VLAN ID {vlan_id} exists in multiple sites: "
-                    f"{mapping[vlan_id]} and {site_slug}"
-                )
-            mapping[vlan_id] = site_slug
+        # Use composite key (site_slug, vid) to allow same VID at different sites
+        mapping[(site_slug, vlan_vid)] = site_slug
 
     return mapping
 
 
 def extract_prefix_site(
-    prefix: Dict[str, Any], vlan_site_mapping: Dict[int, str]
+    prefix: Dict[str, Any], vlan_site_mapping: Dict[tuple[str, int], str]
 ) -> Optional[str]:
     """Extract the site slug for a prefix.
 
     Tries multiple methods in order:
     1. Direct 'site' field (minimal schema compatibility)
-    2. VLAN association lookup (NetBox API format)
+    2. VLAN association lookup using nested VLAN's site (NetBox API format)
 
     Args:
         prefix: Prefix dictionary from NetBox export
-        vlan_site_mapping: VLAN ID → site slug mapping
+        vlan_site_mapping: (site_slug, vid) → site slug mapping
 
     Returns:
         Site slug string, or None if site cannot be determined
@@ -362,9 +382,19 @@ def extract_prefix_site(
             return prefix_site
 
     # Method 2: Look up via VLAN association (NetBox API format)
-    vlan_id = extract_vlan_association(prefix)
-    if vlan_id is not None:
-        return vlan_site_mapping.get(vlan_id)
+    # Extract both the site and VID from the nested VLAN object
+    vlan = prefix.get("vlan")
+    if vlan and isinstance(vlan, dict):
+        # Get site from VLAN
+        vlan_site_slug = extract_site_from_vlan({"site": vlan.get("site")})
+        # Get VID from VLAN
+        vlan_vid = vlan.get("vid")
+        if vlan_vid is None:
+            vlan_vid = vlan.get("vlan_id")
+
+        if vlan_site_slug and vlan_vid is not None:
+            # Look up using composite key
+            return vlan_site_mapping.get((vlan_site_slug, vlan_vid))
 
     # No site could be determined
     return None
