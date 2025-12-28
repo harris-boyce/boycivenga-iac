@@ -385,7 +385,7 @@ def build_vlan_site_mapping(all_vlans: List[Dict[str, Any]]) -> Dict[int, str]:
         for vid, sites in sorted(collisions.items()):
             error_msg += f"  - VID {vid} exists in sites: {', '.join(sorted(sites))}\n"
         error_msg += (
-            "\nVLAN VIDs must be unique per site. "
+            "\nVLAN VIDs must be unique across all sites. "
             "Please resolve these conflicts in NetBox before rendering."
         )
         raise ValueError(error_msg)
