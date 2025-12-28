@@ -309,7 +309,7 @@ def extract_vlan_association(prefix_data: Dict[str, Any]) -> Optional[int]:
 
 
 def build_vlan_site_mapping(
-    all_vlans: List[Dict[str, Any]]
+    all_vlans: List[Dict[str, Any]],
 ) -> Dict[tuple[str, int], str]:
     """Build a mapping of (site_slug, VLAN VID) to site slug.
 
