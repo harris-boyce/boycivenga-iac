@@ -357,18 +357,60 @@ def build_vlan_site_mapping(
     return mapping
 
 
+def build_vlan_id_to_site_mapping(
+    all_vlans: List[Dict[str, Any]],
+) -> Dict[int, str]:
+    """Build a mapping of VLAN internal ID to site slug.
+
+    This mapping is used to determine site from sparse VLAN references
+    in prefix objects, which only include the internal VLAN ID but not
+    the full site information.
+
+    Args:
+        all_vlans: List of all VLANs from NetBox export (full objects)
+
+    Returns:
+        Dictionary mapping internal VLAN ID to site slug
+        Example: {180: "pennington", 187: "countfleetcourt"}
+
+    Note:
+        - Only VLANs with both internal ID and site are included
+        - Used alongside composite key mapping for complete functionality
+    """
+    mapping = {}
+
+    for vlan in all_vlans:
+        # Extract internal ID
+        vlan_id = vlan.get("id")
+        if vlan_id is None:
+            continue
+
+        # Extract site slug
+        site_slug = extract_site_from_vlan(vlan)
+        if site_slug:
+            mapping[vlan_id] = site_slug
+
+    return mapping
+
+
 def extract_prefix_site(
-    prefix: Dict[str, Any], vlan_site_mapping: Dict[tuple[str, int], str]
+    prefix: Dict[str, Any],
+    vlan_site_mapping: Dict[tuple[str, int], str],
+    vlan_id_to_site: Dict[int, str],
 ) -> Optional[str]:
     """Extract the site slug for a prefix.
 
     Tries multiple methods in order:
     1. Direct 'site' field (minimal schema compatibility)
-    2. VLAN association lookup using nested VLAN's site (NetBox API format)
+    2a. VLAN association lookup using nested VLAN's site (NetBox API with full VLAN)
+    2b. VLAN internal ID lookup (NetBox API with sparse VLAN reference)
 
     Args:
         prefix: Prefix dictionary from NetBox export
         vlan_site_mapping: (site_slug, vid) → site slug mapping
+            (for composite key lookups)
+        vlan_id_to_site: internal_vlan_id → site slug mapping
+            (for sparse VLAN lookups)
 
     Returns:
         Site slug string, or None if site cannot be determined
@@ -382,19 +424,24 @@ def extract_prefix_site(
             return prefix_site
 
     # Method 2: Look up via VLAN association (NetBox API format)
-    # Extract both the site and VID from the nested VLAN object
     vlan = prefix.get("vlan")
     if vlan and isinstance(vlan, dict):
-        # Get site from VLAN
+        # Method 2a: Try to get site from full VLAN object (if available)
         vlan_site_slug = extract_site_from_vlan({"site": vlan.get("site")})
-        # Get VID from VLAN
         vlan_vid = vlan.get("vid")
         if vlan_vid is None:
             vlan_vid = vlan.get("vlan_id")
 
         if vlan_site_slug and vlan_vid is not None:
-            # Look up using composite key
+            # Look up using composite key (full VLAN object case)
             return vlan_site_mapping.get((vlan_site_slug, vlan_vid))
+
+        # Method 2b: Fall back to internal ID lookup (sparse VLAN reference)
+        vlan_internal_id = vlan.get("id")
+        if vlan_internal_id is not None:
+            site_from_id = vlan_id_to_site.get(vlan_internal_id)
+            if site_from_id:
+                return site_from_id
 
     # No site could be determined
     return None
@@ -405,7 +452,8 @@ def filter_resources_by_site(
     site_slug: str,
     site_name: str,
     resource_type: str,
-    vlan_site_mapping: Optional[Dict[int, str]] = None,
+    vlan_site_mapping: Optional[Dict[tuple[str, int], str]] = None,
+    vlan_id_to_site: Optional[Dict[int, str]] = None,
 ) -> List[Dict[str, Any]]:
     """Filter resources (prefixes or VLANs) by site.
 
@@ -417,7 +465,10 @@ def filter_resources_by_site(
         site_slug: Site slug to filter by
         site_name: Site name to filter by (fallback)
         resource_type: Type of resource ("prefix" or "vlan")
-        vlan_site_mapping: VLAN ID → site mapping (required for prefixes)
+        vlan_site_mapping: (site_slug, vid) → site slug mapping
+            (for composite key lookups)
+        vlan_id_to_site: internal_vlan_id → site slug mapping
+            (for sparse VLAN lookups)
 
     Returns:
         Filtered list of resources belonging to the specified site
@@ -430,9 +481,14 @@ def filter_resources_by_site(
 
         if resource_type == "prefix":
             # Use VLAN-based matching for prefixes
-            if vlan_site_mapping is None:
-                raise ValueError("vlan_site_mapping required for prefix filtering")
-            resource_site_slug = extract_prefix_site(resource, vlan_site_mapping)
+            if vlan_site_mapping is None or vlan_id_to_site is None:
+                raise ValueError(
+                    "vlan_site_mapping and vlan_id_to_site required "
+                    "for prefix filtering"
+                )
+            resource_site_slug = extract_prefix_site(
+                resource, vlan_site_mapping, vlan_id_to_site
+            )
         else:
             # Direct site field for VLANs
             resource_site = resource.get("site")
@@ -654,7 +710,9 @@ Output Files:
     # Build VLAN → Site mapping for prefix-to-site matching
     print("🔗 Building VLAN → Site mapping...")
     vlan_site_mapping = build_vlan_site_mapping(all_vlans)
-    print(f"   Mapped {len(vlan_site_mapping)} VLAN(s) to sites")
+    vlan_id_to_site = build_vlan_id_to_site_mapping(all_vlans)
+    print(f"   Composite key mapping: {len(vlan_site_mapping)} entries")
+    print(f"   Internal ID mapping: {len(vlan_id_to_site)} VLANs")
     print()
 
     # Generate tfvars file for each site
@@ -670,7 +728,12 @@ Output Files:
 
         # Filter prefixes and VLANs for this site using VLAN-based matching
         site_prefixes = filter_resources_by_site(
-            all_prefixes, site_slug, site_name, "prefix", vlan_site_mapping
+            all_prefixes,
+            site_slug,
+            site_name,
+            "prefix",
+            vlan_site_mapping,
+            vlan_id_to_site,
         )
 
         site_vlans = filter_resources_by_site(all_vlans, site_slug, site_name, "vlan")

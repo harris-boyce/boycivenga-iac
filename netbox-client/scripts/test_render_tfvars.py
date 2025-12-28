@@ -444,8 +444,9 @@ def test_extract_prefix_site_via_vlan():
         ("pennington", 10): "pennington",
         ("other-site", 20): "other-site",
     }
+    vlan_id_to_site = {}
 
-    site = render_tfvars.extract_prefix_site(prefix, vlan_mapping)
+    site = render_tfvars.extract_prefix_site(prefix, vlan_mapping, vlan_id_to_site)
     assert site == "pennington"
 
     print("✅ test_extract_prefix_site_via_vlan passed")
@@ -459,9 +460,10 @@ def test_extract_prefix_site_direct():
         "vlan": 10,
     }
     vlan_mapping = {}
+    vlan_id_to_site = {}
 
     # Should use direct site field, not VLAN lookup
-    site = render_tfvars.extract_prefix_site(prefix, vlan_mapping)
+    site = render_tfvars.extract_prefix_site(prefix, vlan_mapping, vlan_id_to_site)
     assert site == "pennington"
 
     print("✅ test_extract_prefix_site_direct passed")
@@ -474,8 +476,9 @@ def test_extract_prefix_site_no_match():
         "vlan": None,  # No VLAN
     }
     vlan_mapping = {10: "site-a"}
+    vlan_id_to_site = {}
 
-    site = render_tfvars.extract_prefix_site(prefix, vlan_mapping)
+    site = render_tfvars.extract_prefix_site(prefix, vlan_mapping, vlan_id_to_site)
     assert site is None
 
     print("✅ test_extract_prefix_site_no_match passed")
@@ -490,9 +493,10 @@ def test_filter_resources_by_site_prefixes():
     ]
     # Composite key mapping
     vlan_mapping = {("site-a", 10): "site-a", ("site-b", 20): "site-b"}
+    vlan_id_to_site = {}
 
     filtered = render_tfvars.filter_resources_by_site(
-        prefixes, "site-a", "Site A", "prefix", vlan_mapping
+        prefixes, "site-a", "Site A", "prefix", vlan_mapping, vlan_id_to_site
     )
 
     assert len(filtered) == 1
@@ -557,12 +561,20 @@ def test_end_to_end_with_netbox_api_format():
         # Load data
         loaded_data = render_tfvars.load_netbox_export(input_file=input_file)
 
-        # Build VLAN mapping
+        # Build VLAN mappings
         vlan_mapping = render_tfvars.build_vlan_site_mapping(loaded_data["vlans"])
+        vlan_id_to_site = render_tfvars.build_vlan_id_to_site_mapping(
+            loaded_data["vlans"]
+        )
 
         # Filter prefixes for Pennington site
         site_prefixes = render_tfvars.filter_resources_by_site(
-            loaded_data["prefixes"], "pennington", "Pennington", "prefix", vlan_mapping
+            loaded_data["prefixes"],
+            "pennington",
+            "Pennington",
+            "prefix",
+            vlan_mapping,
+            vlan_id_to_site,
         )
 
         # Verify the prefix was matched
@@ -592,12 +604,20 @@ def test_backward_compatibility_minimal_schema():
         # Load data
         loaded_data = render_tfvars.load_netbox_export(input_file=input_file)
 
-        # Build VLAN mapping
+        # Build VLAN mappings
         vlan_mapping = render_tfvars.build_vlan_site_mapping(loaded_data["vlans"])
+        vlan_id_to_site = render_tfvars.build_vlan_id_to_site_mapping(
+            loaded_data["vlans"]
+        )
 
         # Filter prefixes for site-a
         site_prefixes = render_tfvars.filter_resources_by_site(
-            loaded_data["prefixes"], "site-a", "site-a", "prefix", vlan_mapping
+            loaded_data["prefixes"],
+            "site-a",
+            "site-a",
+            "prefix",
+            vlan_mapping,
+            vlan_id_to_site,
         )
 
         # Verify the prefix was matched (using direct site field, not VLAN)
@@ -637,12 +657,20 @@ def test_vlans_without_prefixes_filtered():
         # Load data
         loaded_data = render_tfvars.load_netbox_export(input_file=input_file)
 
-        # Build VLAN mapping
+        # Build VLAN mappings
         vlan_mapping = render_tfvars.build_vlan_site_mapping(loaded_data["vlans"])
+        vlan_id_to_site = render_tfvars.build_vlan_id_to_site_mapping(
+            loaded_data["vlans"]
+        )
 
         # Filter prefixes and VLANs
         site_prefixes = render_tfvars.filter_resources_by_site(
-            loaded_data["prefixes"], "test-site", "test-site", "prefix", vlan_mapping
+            loaded_data["prefixes"],
+            "test-site",
+            "test-site",
+            "prefix",
+            vlan_mapping,
+            vlan_id_to_site,
         )
         site_vlans = render_tfvars.filter_resources_by_site(
             loaded_data["vlans"], "test-site", "test-site", "vlan"
@@ -739,8 +767,11 @@ def test_end_to_end_no_cross_site_prefixes():
 
         loaded_data = render_tfvars.load_netbox_export(input_file=input_file)
 
-        # Build VLAN mapping (should not raise error)
+        # Build VLAN mappings (should not raise error)
         vlan_mapping = render_tfvars.build_vlan_site_mapping(loaded_data["vlans"])
+        vlan_id_to_site = render_tfvars.build_vlan_id_to_site_mapping(
+            loaded_data["vlans"]
+        )
 
         # Filter prefixes for Pennington
         penn_prefixes = render_tfvars.filter_resources_by_site(
@@ -749,6 +780,7 @@ def test_end_to_end_no_cross_site_prefixes():
             "Pennington",
             "prefix",
             vlan_mapping,
+            vlan_id_to_site,
         )
 
         # Should have only Pennington's prefix, not Count Fleet Court's
@@ -762,6 +794,7 @@ def test_end_to_end_no_cross_site_prefixes():
             "Count Fleet Court",
             "prefix",
             vlan_mapping,
+            vlan_id_to_site,
         )
 
         # Should have only CFC's prefix, not Pennington's
@@ -769,6 +802,101 @@ def test_end_to_end_no_cross_site_prefixes():
         assert cfc_prefixes[0]["prefix"] == "10.2.10.0/24"
 
     print("✅ test_end_to_end_no_cross_site_prefixes passed")
+
+
+def test_build_vlan_id_to_site_mapping():
+    """Test building internal VLAN ID to site mapping."""
+    vlans = [
+        {"id": 180, "vid": 10, "site": {"slug": "pennington"}},
+        {"id": 187, "vid": 10, "site": {"slug": "countfleetcourt"}},
+        {"id": 190, "vid": 20, "site": {"slug": "pennington"}},
+        {"vid": 30, "site": {"slug": "pennington"}},  # No ID
+    ]
+
+    mapping = render_tfvars.build_vlan_id_to_site_mapping(vlans)
+
+    # Should map internal IDs to sites
+    assert mapping[180] == "pennington"
+    assert mapping[187] == "countfleetcourt"
+    assert mapping[190] == "pennington"
+    # VLAN without ID should not be in mapping
+    assert 30 not in mapping
+
+    print("✅ test_build_vlan_id_to_site_mapping passed")
+
+
+def test_extract_prefix_site_sparse_vlan():
+    """Test prefix site extraction with sparse VLAN reference (no site field)."""
+    # Real-world case: VLAN object in prefix only has id/vid/name, no site
+    prefix = {
+        "prefix": "10.1.10.0/24",
+        "vlan": {"id": 180, "vid": 10, "name": "LAN"},  # Sparse, no site!
+    }
+
+    # Composite key mapping (used for full VLAN objects)
+    vlan_site_mapping = {("pennington", 10): "pennington"}
+
+    # Internal ID mapping (used for sparse VLAN references)
+    vlan_id_to_site = {180: "pennington"}
+
+    site = render_tfvars.extract_prefix_site(prefix, vlan_site_mapping, vlan_id_to_site)
+    assert site == "pennington"
+
+    print("✅ test_extract_prefix_site_sparse_vlan passed")
+
+
+def test_end_to_end_sparse_vlan_references():
+    """Test full workflow with sparse VLAN references in prefixes."""
+    test_data = {
+        "sites": [{"name": "Pennington", "slug": "pennington"}],
+        "vlans": [
+            # Full VLAN object with site info
+            {
+                "id": 180,
+                "vid": 10,
+                "name": "LAN",
+                "site": {"slug": "pennington", "name": "Pennington"},
+            }
+        ],
+        "prefixes": [
+            {
+                "prefix": "10.1.10.0/24",
+                # Sparse VLAN reference - only has id/vid/name, NO site
+                "vlan": {"id": 180, "vid": 10, "name": "LAN"},
+                "description": "Home network",
+            }
+        ],
+        "tags": [],
+    }
+
+    with tempfile.TemporaryDirectory() as tmpdir:
+        input_file = Path(tmpdir) / "input.json"
+        with open(input_file, "w") as f:
+            json.dump(test_data, f)
+
+        loaded_data = render_tfvars.load_netbox_export(input_file=input_file)
+
+        # Build both mappings
+        vlan_site_mapping = render_tfvars.build_vlan_site_mapping(loaded_data["vlans"])
+        vlan_id_to_site = render_tfvars.build_vlan_id_to_site_mapping(
+            loaded_data["vlans"]
+        )
+
+        # Filter prefixes - should work with sparse VLAN reference
+        penn_prefixes = render_tfvars.filter_resources_by_site(
+            loaded_data["prefixes"],
+            "pennington",
+            "Pennington",
+            "prefix",
+            vlan_site_mapping,
+            vlan_id_to_site,
+        )
+
+        # Should successfully match the prefix
+        assert len(penn_prefixes) == 1
+        assert penn_prefixes[0]["prefix"] == "10.1.10.0/24"
+
+    print("✅ test_end_to_end_sparse_vlan_references passed")
 
 
 def run_all_tests():
@@ -803,6 +931,9 @@ def run_all_tests():
         test_extract_vlan_vid,
         test_composite_key_mapping_same_vid_different_sites,
         test_end_to_end_no_cross_site_prefixes,
+        test_build_vlan_id_to_site_mapping,
+        test_extract_prefix_site_sparse_vlan,
+        test_end_to_end_sparse_vlan_references,
     ]
 
     passed = 0
