@@ -410,56 +410,40 @@ def test_json_keys_are_sorted():
 
 
 def test_build_vlan_site_mapping():
-    """Test VLAN to site mapping construction using internal IDs."""
+    """Test VLAN to site mapping construction using composite keys."""
     vlans = [
-        {"id": 180, "vid": 10, "site": {"slug": "site-a", "name": "Site A"}},
-        {"id": 181, "vid": 20, "site": {"slug": "site-b", "name": "Site B"}},
-        {"id": 182, "vid": 30, "site": "site-a"},  # Minimal schema format
-        {"id": 183, "vid": 40, "site": None},  # No site
+        {"vid": 10, "site": {"slug": "site-a", "name": "Site A"}},
+        {"vid": 20, "site": {"slug": "site-b", "name": "Site B"}},
+        {"vid": 30, "site": "site-a"},  # Minimal schema format
+        {"vid": 40, "site": None},  # No site
     ]
 
     mapping = render_tfvars.build_vlan_site_mapping(vlans)
 
-    # Should use internal IDs (180, 181, 182), not VIDs (10, 20, 30)
-    assert 180 in mapping
-    assert 181 in mapping
-    assert 182 in mapping
-    assert mapping[180] == "site-a"
-    assert mapping[181] == "site-b"
-    assert mapping[182] == "site-a"
-    assert 183 not in mapping  # VLAN without site excluded
+    # Should use composite keys (site_slug, vid)
+    assert ("site-a", 10) in mapping
+    assert ("site-b", 20) in mapping
+    assert ("site-a", 30) in mapping
+    assert mapping[("site-a", 10)] == "site-a"
+    assert mapping[("site-b", 20)] == "site-b"
+    assert mapping[("site-a", 30)] == "site-a"
+    # VLAN without site should not be in mapping
+    assert ("site-a", 40) not in mapping
 
     print("✅ test_build_vlan_site_mapping passed")
-
-
-def test_build_vlan_site_mapping_with_collisions():
-    """Test VLAN mapping detects VID collisions across sites."""
-    vlans = [
-        {"id": 180, "vid": 10, "site": {"slug": "site-a"}},
-        {"id": 187, "vid": 10, "site": {"slug": "site-b"}},  # Same VID, different site
-    ]
-
-    # Should raise ValueError for VID collision across sites
-    try:
-        render_tfvars.build_vlan_site_mapping(vlans)
-        assert False, "Should have raised ValueError for VID collision"
-    except ValueError as e:
-        error_msg = str(e)
-        assert "collision" in error_msg.lower()
-        assert "VID 10" in error_msg
-        assert "site-a" in error_msg
-        assert "site-b" in error_msg
-
-    print("✅ test_build_vlan_site_mapping_with_collisions passed")
 
 
 def test_extract_prefix_site_via_vlan():
     """Test prefix site extraction via VLAN association."""
     prefix = {
         "prefix": "10.1.10.0/24",
-        "vlan": {"vid": 10, "name": "LAN"},
+        "vlan": {"vid": 10, "site": {"slug": "pennington"}, "name": "LAN"},
     }
-    vlan_mapping = {10: "pennington", 20: "other-site"}
+    # Composite key mapping
+    vlan_mapping = {
+        ("pennington", 10): "pennington",
+        ("other-site", 20): "other-site",
+    }
 
     site = render_tfvars.extract_prefix_site(prefix, vlan_mapping)
     assert site == "pennington"
@@ -500,11 +484,12 @@ def test_extract_prefix_site_no_match():
 def test_filter_resources_by_site_prefixes():
     """Test filtering prefixes by site via VLAN mapping."""
     prefixes = [
-        {"prefix": "10.1.0.0/24", "vlan": {"vid": 10}},
-        {"prefix": "10.2.0.0/24", "vlan": {"vid": 20}},
+        {"prefix": "10.1.0.0/24", "vlan": {"vid": 10, "site": {"slug": "site-a"}}},
+        {"prefix": "10.2.0.0/24", "vlan": {"vid": 20, "site": {"slug": "site-b"}}},
         {"prefix": "10.0.0.0/8", "vlan": None},  # No VLAN
     ]
-    vlan_mapping = {10: "site-a", 20: "site-b"}
+    # Composite key mapping
+    vlan_mapping = {("site-a", 10): "site-a", ("site-b", 20): "site-b"}
 
     filtered = render_tfvars.filter_resources_by_site(
         prefixes, "site-a", "Site A", "prefix", vlan_mapping
@@ -549,7 +534,12 @@ def test_end_to_end_with_netbox_api_format():
         "prefixes": [
             {
                 "prefix": "10.1.10.0/24",
-                "vlan": {"id": 180, "vid": 10, "name": "LAN"},
+                "vlan": {
+                    "id": 180,
+                    "vid": 10,
+                    "name": "LAN",
+                    "site": {"slug": "pennington"},
+                },
                 "description": "Home network",
                 "status": {"value": "active"},
             }
@@ -679,49 +669,69 @@ def test_vlans_without_prefixes_filtered():
     print("✅ test_vlans_without_prefixes_filtered passed")
 
 
-def test_extract_vlan_internal_id():
-    """Test extracting internal VLAN ID from prefix association."""
-    # Prefix with nested VLAN object containing internal ID
+def test_extract_vlan_vid():
+    """Test extracting VLAN VID from prefix association."""
+    # Prefix with nested VLAN object containing both internal ID and VID
     prefix = {
         "prefix": "10.1.10.0/24",
         "vlan": {"id": 180, "vid": 10, "name": "PENN_Home_General"},
     }
 
     vlan_id = render_tfvars.extract_vlan_association(prefix)
-    # Should return internal ID (180), not VID (10)
-    assert vlan_id == 180
+    # Should return VID (10) for Terraform output, not internal ID (180)
+    assert vlan_id == 10
 
-    print("✅ test_extract_vlan_internal_id passed")
+    print("✅ test_extract_vlan_vid passed")
+
+
+def test_composite_key_mapping_same_vid_different_sites():
+    """Test that composite key mapping allows same VID at different sites."""
+    # Real-world scenario: Both sites use VID 10 (this is normal and valid)
+    vlans = [
+        {"vid": 10, "site": {"slug": "pennington"}},
+        {"vid": 10, "site": {"slug": "countfleetcourt"}},
+        {"vid": 20, "site": {"slug": "pennington"}},
+    ]
+
+    mapping = render_tfvars.build_vlan_site_mapping(vlans)
+
+    # Should create composite keys allowing same VID at different sites
+    assert ("pennington", 10) in mapping
+    assert ("countfleetcourt", 10) in mapping
+    assert ("pennington", 20) in mapping
+    assert mapping[("pennington", 10)] == "pennington"
+    assert mapping[("countfleetcourt", 10)] == "countfleetcourt"
+
+    print("✅ test_composite_key_mapping_same_vid_different_sites passed")
 
 
 def test_end_to_end_no_cross_site_prefixes():
     """Test that prefixes don't leak across sites with same VIDs."""
-    # Real-world scenario: Both sites use VID 10, but different internal IDs
+    # Real-world scenario: Both sites use VID 10, different sites
     test_data = {
         "sites": [
             {"name": "Pennington", "slug": "pennington"},
             {"name": "Count Fleet Court", "slug": "countfleetcourt"},
         ],
         "vlans": [
-            {"id": 180, "vid": 10, "site": {"slug": "pennington"}},
-            {"id": 187, "vid": 10, "site": {"slug": "countfleetcourt"}},
+            {"vid": 10, "site": {"slug": "pennington"}},
+            {"vid": 10, "site": {"slug": "countfleetcourt"}},
         ],
         "prefixes": [
             {
                 "prefix": "10.1.10.0/24",
-                "vlan": {"id": 180, "vid": 10},
+                "vlan": {"vid": 10, "site": {"slug": "pennington"}},
                 "description": "Pennington LAN",
             },
             {
                 "prefix": "10.2.10.0/24",
-                "vlan": {"id": 187, "vid": 10},
+                "vlan": {"vid": 10, "site": {"slug": "countfleetcourt"}},
                 "description": "CFC LAN",
             },
         ],
         "tags": [],
     }
 
-    # Should raise ValueError due to VID collision
     with tempfile.TemporaryDirectory() as tmpdir:
         input_file = Path(tmpdir) / "input.json"
         with open(input_file, "w") as f:
@@ -729,55 +739,36 @@ def test_end_to_end_no_cross_site_prefixes():
 
         loaded_data = render_tfvars.load_netbox_export(input_file=input_file)
 
-        # Should raise on VID collision detection
-        try:
-            render_tfvars.build_vlan_site_mapping(loaded_data["vlans"])
-            assert False, "Should raise ValueError for VID collision"
-        except ValueError as e:
-            error_msg = str(e)
-            assert "collision" in error_msg.lower()
-            assert "VID 10" in error_msg
+        # Build VLAN mapping (should not raise error)
+        vlan_mapping = render_tfvars.build_vlan_site_mapping(loaded_data["vlans"])
+
+        # Filter prefixes for Pennington
+        penn_prefixes = render_tfvars.filter_resources_by_site(
+            loaded_data["prefixes"],
+            "pennington",
+            "Pennington",
+            "prefix",
+            vlan_mapping,
+        )
+
+        # Should have only Pennington's prefix, not Count Fleet Court's
+        assert len(penn_prefixes) == 1
+        assert penn_prefixes[0]["prefix"] == "10.1.10.0/24"
+
+        # Filter prefixes for Count Fleet Court
+        cfc_prefixes = render_tfvars.filter_resources_by_site(
+            loaded_data["prefixes"],
+            "countfleetcourt",
+            "Count Fleet Court",
+            "prefix",
+            vlan_mapping,
+        )
+
+        # Should have only CFC's prefix, not Pennington's
+        assert len(cfc_prefixes) == 1
+        assert cfc_prefixes[0]["prefix"] == "10.2.10.0/24"
 
     print("✅ test_end_to_end_no_cross_site_prefixes passed")
-
-
-def test_same_vid_same_site_no_error():
-    """Test that same VID at same site doesn't trigger collision error."""
-    # Two VLANs with same VID at same site (unusual but valid)
-    vlans = [
-        {"id": 180, "vid": 10, "site": {"slug": "pennington"}},
-        {"id": 181, "vid": 20, "site": {"slug": "pennington"}},
-        {"id": 187, "vid": 30, "site": {"slug": "countfleetcourt"}},
-    ]
-
-    # Should not raise - no VID collision across different sites
-    mapping = render_tfvars.build_vlan_site_mapping(vlans)
-
-    # Should create mapping using internal IDs
-    assert len(mapping) == 3
-    assert 180 in mapping
-    assert 181 in mapping
-    assert 187 in mapping
-    assert mapping[180] == "pennington"
-    assert mapping[181] == "pennington"
-    assert mapping[187] == "countfleetcourt"
-
-    print("✅ test_same_vid_same_site_no_error passed")
-
-
-def test_extract_vlan_association_fallback_to_vid():
-    """Test that extract_vlan_association falls back to VID if no internal ID."""
-    # Minimal schema format or legacy data without internal ID
-    prefix = {
-        "prefix": "10.0.0.0/24",
-        "vlan": {"vid": 10, "name": "LAN"},  # No 'id' field
-    }
-
-    vlan_id = render_tfvars.extract_vlan_association(prefix)
-    # Should fallback to VID when internal ID not available
-    assert vlan_id == 10
-
-    print("✅ test_extract_vlan_association_fallback_to_vid passed")
 
 
 def run_all_tests():
@@ -801,7 +792,6 @@ def run_all_tests():
         test_load_netbox_export_from_directory,
         test_json_keys_are_sorted,
         test_build_vlan_site_mapping,
-        test_build_vlan_site_mapping_with_collisions,
         test_extract_prefix_site_via_vlan,
         test_extract_prefix_site_direct,
         test_extract_prefix_site_no_match,
@@ -810,11 +800,9 @@ def run_all_tests():
         test_end_to_end_with_netbox_api_format,
         test_backward_compatibility_minimal_schema,
         test_vlans_without_prefixes_filtered,
-        test_vlan_internal_id_mapping,
-        test_extract_vlan_internal_id,
+        test_extract_vlan_vid,
+        test_composite_key_mapping_same_vid_different_sites,
         test_end_to_end_no_cross_site_prefixes,
-        test_same_vid_same_site_no_error,
-        test_extract_vlan_association_fallback_to_vid,
     ]
 
     passed = 0
