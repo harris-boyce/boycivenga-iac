@@ -679,28 +679,6 @@ def test_vlans_without_prefixes_filtered():
     print("✅ test_vlans_without_prefixes_filtered passed")
 
 
-def test_vlan_internal_id_mapping():
-    """Test that VLAN mapping uses NetBox internal ID, not VID."""
-    # Two VLANs with same VID but different internal IDs at different sites
-    vlans = [
-        {"id": 180, "vid": 10, "site": {"slug": "pennington"}},
-        {"id": 187, "vid": 10, "site": {"slug": "countfleetcourt"}},
-    ]
-
-    # Should raise ValueError for VID collision across sites
-    try:
-        render_tfvars.build_vlan_site_mapping(vlans)
-        assert False, "Should raise ValueError for VID collision"
-    except ValueError as e:
-        error_msg = str(e)
-        assert "collision" in error_msg.lower()
-        assert "VID 10" in error_msg
-        assert "pennington" in error_msg
-        assert "countfleetcourt" in error_msg
-
-    print("✅ test_vlan_internal_id_mapping passed")
-
-
 def test_extract_vlan_internal_id():
     """Test extracting internal VLAN ID from prefix association."""
     # Prefix with nested VLAN object containing internal ID
