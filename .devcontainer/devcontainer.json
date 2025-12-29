@@ -9,7 +9,7 @@
     "ghcr.io/devcontainers/features/terraform:1": {},
     "ghcr.io/devcontainers/features/github-cli:1": {}
   },
-  "postCreateCommand": "pre-commit install 2>/dev/null || echo 'Info: pre-commit installed but not configured (add .pre-commit-config.yaml when ready)'",
+  "postCreateCommand": "bash -c 'set -e; pre-commit install 2>/dev/null || true; cd mcp-server && pip install -e . && echo \"✅ MCP server installed successfully\"'",
 
   "customizations": {
     "vscode": {

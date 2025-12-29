@@ -1,0 +1,29 @@
+[project]
+name = "boycivenga-mcp"
+version = "0.1.0"
+description = "MCP server for GitHub workflow orchestration in boycivenga-iac"
+requires-python = ">=3.10"
+dependencies = [
+    "mcp>=1.1.0",
+]
+
+[project.scripts]
+boycivenga-mcp = "boycivenga_mcp.server:main"
+
+[project.optional-dependencies]
+dev = [
+    "black",
+    "isort",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.black]
+line-length = 88
+target-version = ["py310"]
+
+[tool.isort]
+profile = "black"
+line_length = 88
