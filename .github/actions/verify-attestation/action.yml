@@ -55,6 +55,19 @@ runs:
         echo "  Repository: $REPO_OWNER/$REPO_NAME"
         echo ""
 
+        # Validate inputs don't contain slashes (common mistake)
+        if [[ "$REPO_OWNER" == *"/"* ]]; then
+          echo "❌ Error: repo-owner should not contain '/'. Got: $REPO_OWNER"
+          echo "   Provide just the owner name, not the full repository path."
+          exit 1
+        fi
+
+        if [[ "$REPO_NAME" == *"/"* ]]; then
+          echo "❌ Error: repo-name should not contain '/'. Got: $REPO_NAME"
+          echo "   Provide just the repository name, not the full path."
+          exit 1
+        fi
+
         # Validate environment
         if [[ "${{ inputs.environment }}" != "prod" ]] && [[ "${{ inputs.environment }}" != "dev" ]]; then
           echo "❌ Error: Invalid environment '${{ inputs.environment }}'. Must be 'prod' or 'dev'."
@@ -150,8 +163,7 @@ runs:
 
           # Run attestation verification
           if gh attestation verify "$file" \
-              --owner "$REPO_OWNER" \
-              --repo "$REPO_NAME" 2>&1 | tee "$TEMP_OUTPUT"; then
+              --repo "$REPO_OWNER/$REPO_NAME" 2>&1 | tee "$TEMP_OUTPUT"; then
             echo "  ✅ Verification succeeded"
             VERIFIED=$((VERIFIED + 1))
           else
