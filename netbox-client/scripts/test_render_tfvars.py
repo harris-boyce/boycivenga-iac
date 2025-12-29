@@ -433,6 +433,27 @@ def test_build_vlan_site_mapping():
     print("✅ test_build_vlan_site_mapping passed")
 
 
+def test_build_vlan_id_to_site_mapping():
+    """Test building internal VLAN ID to site mapping."""
+    vlans = [
+        {"id": 180, "vid": 10, "site": {"slug": "pennington"}},
+        {"id": 187, "vid": 10, "site": {"slug": "countfleetcourt"}},
+        {"id": 190, "vid": 20, "site": {"slug": "pennington"}},
+        {"vid": 30, "site": {"slug": "pennington"}},  # No ID
+    ]
+
+    mapping = render_tfvars.build_vlan_id_to_site_mapping(vlans)
+
+    # Should map internal IDs to sites
+    assert mapping[180] == "pennington"
+    assert mapping[187] == "countfleetcourt"
+    assert mapping[190] == "pennington"
+    # VLAN without ID should not be in mapping
+    assert 30 not in mapping
+
+    print("✅ test_build_vlan_id_to_site_mapping passed")
+
+
 def test_extract_prefix_site_via_vlan():
     """Test prefix site extraction via VLAN association."""
     prefix = {
@@ -482,6 +503,26 @@ def test_extract_prefix_site_no_match():
     assert site is None
 
     print("✅ test_extract_prefix_site_no_match passed")
+
+
+def test_extract_prefix_site_sparse_vlan():
+    """Test prefix site extraction with sparse VLAN reference (no site field)."""
+    # Real-world case: VLAN object in prefix only has id/vid/name, no site!
+    prefix = {
+        "prefix": "10.1.10.0/24",
+        "vlan": {"id": 180, "vid": 10, "name": "LAN"},  # Sparse, no site!
+    }
+
+    # Composite key mapping (used for full VLAN objects)
+    vlan_site_mapping = {("pennington", 10): "pennington"}
+
+    # Internal ID mapping (used for sparse VLAN references)
+    vlan_id_to_site = {180: "pennington"}
+
+    site = render_tfvars.extract_prefix_site(prefix, vlan_site_mapping, vlan_id_to_site)
+    assert site == "pennington"
+
+    print("✅ test_extract_prefix_site_sparse_vlan passed")
 
 
 def test_filter_resources_by_site_prefixes():
@@ -804,47 +845,6 @@ def test_end_to_end_no_cross_site_prefixes():
     print("✅ test_end_to_end_no_cross_site_prefixes passed")
 
 
-def test_build_vlan_id_to_site_mapping():
-    """Test building internal VLAN ID to site mapping."""
-    vlans = [
-        {"id": 180, "vid": 10, "site": {"slug": "pennington"}},
-        {"id": 187, "vid": 10, "site": {"slug": "countfleetcourt"}},
-        {"id": 190, "vid": 20, "site": {"slug": "pennington"}},
-        {"vid": 30, "site": {"slug": "pennington"}},  # No ID
-    ]
-
-    mapping = render_tfvars.build_vlan_id_to_site_mapping(vlans)
-
-    # Should map internal IDs to sites
-    assert mapping[180] == "pennington"
-    assert mapping[187] == "countfleetcourt"
-    assert mapping[190] == "pennington"
-    # VLAN without ID should not be in mapping
-    assert 30 not in mapping
-
-    print("✅ test_build_vlan_id_to_site_mapping passed")
-
-
-def test_extract_prefix_site_sparse_vlan():
-    """Test prefix site extraction with sparse VLAN reference (no site field)."""
-    # Real-world case: VLAN object in prefix only has id/vid/name, no site
-    prefix = {
-        "prefix": "10.1.10.0/24",
-        "vlan": {"id": 180, "vid": 10, "name": "LAN"},  # Sparse, no site!
-    }
-
-    # Composite key mapping (used for full VLAN objects)
-    vlan_site_mapping = {("pennington", 10): "pennington"}
-
-    # Internal ID mapping (used for sparse VLAN references)
-    vlan_id_to_site = {180: "pennington"}
-
-    site = render_tfvars.extract_prefix_site(prefix, vlan_site_mapping, vlan_id_to_site)
-    assert site == "pennington"
-
-    print("✅ test_extract_prefix_site_sparse_vlan passed")
-
-
 def test_end_to_end_sparse_vlan_references():
     """Test full workflow with sparse VLAN references in prefixes."""
     test_data = {
@@ -920,9 +920,11 @@ def run_all_tests():
         test_load_netbox_export_from_directory,
         test_json_keys_are_sorted,
         test_build_vlan_site_mapping,
+        test_build_vlan_id_to_site_mapping,
         test_extract_prefix_site_via_vlan,
         test_extract_prefix_site_direct,
         test_extract_prefix_site_no_match,
+        test_extract_prefix_site_sparse_vlan,
         test_filter_resources_by_site_prefixes,
         test_filter_resources_by_site_vlans,
         test_end_to_end_with_netbox_api_format,
@@ -931,8 +933,6 @@ def run_all_tests():
         test_extract_vlan_vid,
         test_composite_key_mapping_same_vid_different_sites,
         test_end_to_end_no_cross_site_prefixes,
-        test_build_vlan_id_to_site_mapping,
-        test_extract_prefix_site_sparse_vlan,
         test_end_to_end_sparse_vlan_references,
     ]
 
