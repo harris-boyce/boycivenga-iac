@@ -61,7 +61,7 @@ concurrency:
 permissions:
   contents: read
   actions: read
-  id-token: read  # Required for attestation verification
+  attestations: read   # Required for attestation verification
 
 jobs:
   validate-inputs:

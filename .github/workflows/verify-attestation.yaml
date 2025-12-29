@@ -15,7 +15,7 @@ on:
 permissions:
   contents: read
   actions: read
-  id-token: read
+  attestations: read   # Required for attestation verification
 
 jobs:
   verify-attestations:
