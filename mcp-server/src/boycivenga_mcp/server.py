@@ -16,6 +16,10 @@ from .tools.trigger_apply import trigger_apply as trigger_apply_impl
 from .tools.trigger_plan import trigger_plan as trigger_plan_impl
 from .tools.trigger_render import trigger_render as trigger_render_impl
 
+# Set default environment variables before initializing GitHubClient
+if not os.getenv("GITHUB_REPO"):
+    os.environ["GITHUB_REPO"] = "harris-boyce/boycivenga-iac"
+
 # Initialize FastMCP server
 mcp = FastMCP("boycivenga-iac")
 
@@ -72,9 +76,9 @@ def trigger_plan(
 
     return trigger_plan_impl(
         render_run_id=render_run_id,
+        github_client=github_client,
         site=site_param,
         pr_number=pr_param,
-        github_client=github_client,
     )
 
 
@@ -106,12 +110,6 @@ def main():
     # Validate environment
     if not os.getenv("GITHUB_TOKEN"):
         print("Warning: GITHUB_TOKEN not set. Authentication may fail.")
-
-    if not os.getenv("GITHUB_REPO"):
-        print(
-            "Warning: GITHUB_REPO not set. Using default: harris-boyce/boycivenga-iac"
-        )
-        os.environ["GITHUB_REPO"] = "harris-boyce/boycivenga-iac"
 
     # Run server with stdio transport
     mcp.run()

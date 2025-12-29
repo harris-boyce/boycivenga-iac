@@ -121,19 +121,27 @@ def test_get_workflow_run_status_invalid_json():
 
 
 def test_trigger_workflow_basic():
-    """Test basic workflow trigger."""
+    """Test basic workflow trigger with polling."""
     client = GitHubClient(repo="test/repo", token="test_token")
 
-    # Mock both the trigger call and the list call
+    # Mock the before query (existing runs)
+    mock_before = MagicMock()
+    mock_before.stdout = json.dumps([{"databaseId": 100}])
+
+    # Mock the trigger call
     mock_trigger = MagicMock()
     mock_trigger.stdout = ""
 
-    mock_list = MagicMock()
-    mock_list.stdout = json.dumps([{"databaseId": 456}])
+    # Mock the after query (with new run)
+    mock_after = MagicMock()
+    mock_after.stdout = json.dumps(
+        [{"databaseId": 456, "createdAt": "2025-12-29T00:00:00Z"}]
+    )
 
-    with patch("subprocess.run", side_effect=[mock_trigger, mock_list]):
-        run_id = client.trigger_workflow("test-workflow.yaml")
-        assert run_id == "456"
+    with patch("subprocess.run", side_effect=[mock_before, mock_trigger, mock_after]):
+        with patch("time.sleep"):  # Skip actual sleep in tests
+            run_id = client.trigger_workflow("test-workflow.yaml")
+            assert run_id == "456"
 
     print("✅ test_trigger_workflow_basic passed")
 
@@ -142,23 +150,34 @@ def test_trigger_workflow_with_inputs():
     """Test workflow trigger with inputs."""
     client = GitHubClient(repo="test/repo", token="test_token")
 
+    # Mock the before query (no existing runs)
+    mock_before = MagicMock()
+    mock_before.stdout = json.dumps([])
+
+    # Mock the trigger call
     mock_trigger = MagicMock()
     mock_trigger.stdout = ""
 
-    mock_list = MagicMock()
-    mock_list.stdout = json.dumps([{"databaseId": 789}])
+    # Mock the after query (with new run)
+    mock_after = MagicMock()
+    mock_after.stdout = json.dumps(
+        [{"databaseId": 789, "createdAt": "2025-12-29T00:00:00Z"}]
+    )
 
-    with patch("subprocess.run", side_effect=[mock_trigger, mock_list]) as mock_run:
-        run_id = client.trigger_workflow(
-            "test-workflow.yaml", inputs={"site": "pennington", "pr_number": "42"}
-        )
-        assert run_id == "789"
+    with patch(
+        "subprocess.run", side_effect=[mock_before, mock_trigger, mock_after]
+    ) as mock_run:
+        with patch("time.sleep"):  # Skip actual sleep in tests
+            run_id = client.trigger_workflow(
+                "test-workflow.yaml", inputs={"site": "pennington", "pr_number": "42"}
+            )
+            assert run_id == "789"
 
-        # Verify inputs were passed correctly
-        trigger_call = mock_run.call_args_list[0]
-        cmd = trigger_call[0][0]
-        assert "--field" in cmd
-        assert "site=pennington" in cmd
+            # Verify inputs were passed correctly (trigger call is index 1)
+            trigger_call = mock_run.call_args_list[1]
+            cmd = trigger_call[0][0]
+            assert "--field" in cmd
+            assert "site=pennington" in cmd
 
     print("✅ test_trigger_workflow_with_inputs passed")
 

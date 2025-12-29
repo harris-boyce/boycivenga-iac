@@ -41,6 +41,10 @@ def get_workflow_status(run_id: str, github_client: GitHubClient) -> Dict[str, A
             "error": "Run ID 999999 not found or you don't have access"
         }
     """
+    # Validate run_id is numeric
+    if not run_id or not run_id.isdigit():
+        return {"success": False, "error": "run_id must be a numeric workflow run ID"}
+
     try:
         run_info = github_client.get_workflow_run_status(run_id)
         return {"success": True, "data": run_info}

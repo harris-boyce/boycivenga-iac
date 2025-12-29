@@ -63,6 +63,34 @@ def test_get_workflow_status_returns_full_data():
     print("✅ test_get_workflow_status_returns_full_data passed")
 
 
+def test_get_workflow_status_invalid_run_id_empty():
+    """Test that empty run_id is rejected."""
+    mock_client = MagicMock()
+
+    result = get_workflow_status("", mock_client)
+
+    assert result["success"] is False
+    assert "error" in result
+    assert "run_id must be a numeric workflow run ID" in result["error"]
+    # Ensure GitHub client was never called
+    mock_client.get_workflow_run_status.assert_not_called()
+    print("✅ test_get_workflow_status_invalid_run_id_empty passed")
+
+
+def test_get_workflow_status_invalid_run_id_non_numeric():
+    """Test that non-numeric run_id is rejected."""
+    mock_client = MagicMock()
+
+    result = get_workflow_status("abc123", mock_client)
+
+    assert result["success"] is False
+    assert "error" in result
+    assert "run_id must be a numeric workflow run ID" in result["error"]
+    # Ensure GitHub client was never called
+    mock_client.get_workflow_run_status.assert_not_called()
+    print("✅ test_get_workflow_status_invalid_run_id_non_numeric passed")
+
+
 def run_all_tests():
     """Run all test functions."""
     print("=" * 70)
@@ -74,6 +102,8 @@ def run_all_tests():
         test_get_workflow_status_success,
         test_get_workflow_status_error,
         test_get_workflow_status_returns_full_data,
+        test_get_workflow_status_invalid_run_id_empty,
+        test_get_workflow_status_invalid_run_id_non_numeric,
     ]
 
     passed = 0

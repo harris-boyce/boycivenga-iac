@@ -8,9 +8,9 @@ from ..github_client import GitHubClient, GitHubClientError
 
 def trigger_plan(
     render_run_id: str,
+    github_client: GitHubClient,
     site: Optional[str] = None,
     pr_number: Optional[str] = None,
-    github_client: GitHubClient = None,
 ) -> Dict[str, Any]:
     """Trigger the terraform-plan workflow.
 
@@ -79,11 +79,11 @@ def trigger_plan(
         # Build workflow inputs
         inputs = {"render_run_id": render_run_id}
 
-        if pr_number:
-            inputs["pr_number"] = pr_number
-
         if site:
             inputs["site"] = site
+
+        if pr_number:
+            inputs["pr_number"] = pr_number
 
         # Trigger workflow
         run_id = github_client.trigger_workflow(

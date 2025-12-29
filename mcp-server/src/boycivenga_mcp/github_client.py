@@ -9,6 +9,7 @@ gh installation and avoid additional dependencies.
 import json
 import os
 import subprocess
+import time
 from typing import Any, Dict, Optional
 
 
@@ -133,9 +134,34 @@ class GitHubClient:
             GitHubClientError: If workflow trigger fails
 
         Note:
-            This method triggers the workflow and waits briefly to capture the run ID.
-            The actual workflow execution is asynchronous.
+            This method triggers the workflow and polls for up to 10 seconds
+            to identify the newly created run. Uses before/after comparison
+            to handle race conditions when multiple workflows might be triggered
+            concurrently. The actual workflow execution is asynchronous.
         """
+        # Get the current latest run ID before triggering (to detect new run)
+        try:
+            before_output = self._run_gh_command(
+                [
+                    "run",
+                    "list",
+                    "--repo",
+                    self.repo,
+                    "--workflow",
+                    workflow_file,
+                    "--limit",
+                    "1",
+                    "--json",
+                    "databaseId",
+                ]
+            )
+            before_runs = json.loads(before_output)
+            before_id = before_runs[0]["databaseId"] if before_runs else 0
+        except (json.JSONDecodeError, KeyError, IndexError):
+            # No existing runs, start from 0
+            before_id = 0
+
+        # Build trigger command
         cmd = ["workflow", "run", workflow_file, "--repo", self.repo, "--ref", ref]
 
         # Add inputs if provided
@@ -146,27 +172,40 @@ class GitHubClient:
         # Trigger workflow (this doesn't return run ID directly)
         self._run_gh_command(cmd)
 
-        # Query for the most recent run of this workflow
-        # Note: There's a race condition here, but gh workflow run doesn't return ID
-        list_output = self._run_gh_command(
-            [
-                "run",
-                "list",
-                "--repo",
-                self.repo,
-                "--workflow",
-                workflow_file,
-                "--limit",
-                "1",
-                "--json",
-                "databaseId",
-            ]
-        )
+        # Poll for new run (max 10 attempts, 1 second apart)
+        for attempt in range(10):
+            time.sleep(1)
 
-        try:
-            runs = json.loads(list_output)
-            if not runs:
-                raise GitHubClientError("No runs found after triggering workflow")
-            return str(runs[0]["databaseId"])
-        except (json.JSONDecodeError, KeyError, IndexError) as e:
-            raise GitHubClientError(f"Failed to get run ID: {e}")
+            try:
+                after_output = self._run_gh_command(
+                    [
+                        "run",
+                        "list",
+                        "--repo",
+                        self.repo,
+                        "--workflow",
+                        workflow_file,
+                        "--limit",
+                        "5",
+                        "--json",
+                        "databaseId,createdAt",
+                    ]
+                )
+                after_runs = json.loads(after_output)
+
+                # Find the first run with ID greater than before_id
+                for run in after_runs:
+                    if run["databaseId"] > before_id:
+                        return str(run["databaseId"])
+
+            except (json.JSONDecodeError, KeyError) as e:
+                # Continue polling on transient errors
+                if attempt == 9:  # Last attempt
+                    raise GitHubClientError(f"Failed to parse run list: {e}")
+                continue
+
+        # If we get here, we didn't find the new run within timeout
+        raise GitHubClientError(
+            f"Workflow triggered but run ID not found within 10 seconds. "
+            f"Check workflow runs manually for {workflow_file}."
+        )
