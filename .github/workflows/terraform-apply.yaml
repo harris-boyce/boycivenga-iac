@@ -416,7 +416,7 @@ jobs:
       - name: Set up Terraform
         uses: hashicorp/setup-terraform@v3
         with:
-          terraform_version: "~> 1.0"
+          terraform_version: "~> 1.14"  # Align with local development (v1.14.3)
 
       - name: Configure Terraform provider (stub mode)
         run: |
