@@ -445,7 +445,7 @@ jobs:
             'data.terraform.plan.explanation' > tfplan-${{ matrix.site }}-explanation.txt
 
           # Extract outcome for workflow control
-          OUTCOME=$(jq -r '.result.outcome' tfplan-${{ matrix.site }}-decision.json)
+          OUTCOME=$(jq -r '.result[0].expressions[0].value.outcome' tfplan-${{ matrix.site }}-decision.json)
           echo "outcome=${OUTCOME}" >> $GITHUB_OUTPUT
 
           # Display the explanation to console
