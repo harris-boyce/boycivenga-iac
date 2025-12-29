@@ -8,8 +8,8 @@ from unittest.mock import MagicMock
 # Add parent directory to path for imports
 sys.path.insert(0, str(Path(__file__).parent.parent.parent / "src"))
 
-from boycivenga_mcp.github_client import GitHubClientError
-from boycivenga_mcp.tools.trigger_plan import trigger_plan
+from boycivenga_mcp.github_client import GitHubClientError  # noqa: E402
+from boycivenga_mcp.tools.trigger_plan import trigger_plan  # noqa: E402
 
 
 def test_trigger_plan_success_minimal():
@@ -55,7 +55,10 @@ def test_trigger_plan_success_all_inputs():
     mock_client.repo = "harris-boyce/boycivenga-iac"
 
     result = trigger_plan(
-        "20562567130", site="count-fleet-court", pr_number="42", github_client=mock_client
+        "20562567130",
+        site="count-fleet-court",
+        pr_number="42",
+        github_client=mock_client,
     )
 
     assert result["success"] is True
@@ -110,7 +113,9 @@ def test_trigger_plan_invalid_pr_number():
 def test_trigger_plan_error():
     """Test error handling in plan workflow trigger."""
     mock_client = MagicMock()
-    mock_client.trigger_workflow.side_effect = GitHubClientError("Workflow trigger failed")
+    mock_client.trigger_workflow.side_effect = GitHubClientError(
+        "Workflow trigger failed"
+    )
 
     result = trigger_plan("12345", github_client=mock_client)
 

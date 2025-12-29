@@ -50,7 +50,9 @@ def trigger_render() -> dict[str, Any]:
 
 
 @mcp.tool()
-def trigger_plan(render_run_id: str, site: str = "", pr_number: str = "") -> dict[str, Any]:
+def trigger_plan(
+    render_run_id: str, site: str = "", pr_number: str = ""
+) -> dict[str, Any]:
     """Trigger the terraform-plan workflow.
 
     This workflow downloads attested artifacts from a render run, verifies
@@ -92,7 +94,10 @@ def trigger_apply(plan_run_id: str, site: str, pr_number: str) -> dict[str, Any]
         Dictionary with triggered run information (run_id, url, inputs)
     """
     return trigger_apply_impl(
-        plan_run_id=plan_run_id, site=site, pr_number=pr_number, github_client=github_client
+        plan_run_id=plan_run_id,
+        site=site,
+        pr_number=pr_number,
+        github_client=github_client,
     )
 
 
@@ -103,7 +108,9 @@ def main():
         print("Warning: GITHUB_TOKEN not set. Authentication may fail.")
 
     if not os.getenv("GITHUB_REPO"):
-        print("Warning: GITHUB_REPO not set. Using default: harris-boyce/boycivenga-iac")
+        print(
+            "Warning: GITHUB_REPO not set. Using default: harris-boyce/boycivenga-iac"
+        )
         os.environ["GITHUB_REPO"] = "harris-boyce/boycivenga-iac"
 
     # Run server with stdio transport

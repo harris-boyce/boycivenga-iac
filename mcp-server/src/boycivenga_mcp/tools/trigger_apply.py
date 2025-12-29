@@ -39,7 +39,10 @@ def trigger_apply(
             "success": True,
             "data": {
                 "run_id": "20562700000",
-                "url": "https://github.com/harris-boyce/boycivenga-iac/actions/runs/20562700000",
+                "url": (
+                    "https://github.com/harris-boyce/boycivenga-iac"
+                    "/actions/runs/20562700000"
+                ),
                 "workflow": "terraform-apply.yaml",
                 "inputs": {
                     "plan_run_id": "20562600000",
@@ -66,7 +69,10 @@ def trigger_apply(
         return {"success": False, "error": "plan_run_id is required"}
 
     if not plan_run_id.isdigit():
-        return {"success": False, "error": "plan_run_id must be a numeric workflow run ID"}
+        return {
+            "success": False,
+            "error": "plan_run_id must be a numeric workflow run ID",
+        }
 
     if not site:
         return {"success": False, "error": "site is required"}
@@ -74,7 +80,10 @@ def trigger_apply(
     if not site.replace("-", "").replace("_", "").isalnum():
         return {
             "success": False,
-            "error": "site must contain only alphanumeric characters, hyphens, and underscores",
+            "error": (
+                "site must contain only alphanumeric characters, "
+                "hyphens, and underscores"
+            ),
         }
 
     if not pr_number:

@@ -28,7 +28,10 @@ def get_workflow_status(run_id: str, github_client: GitHubClient) -> Dict[str, A
                 "workflowName": "Render Artifacts",
                 "createdAt": "2025-12-29T01:31:55Z",
                 "updatedAt": "2025-12-29T01:33:12Z",
-                "url": "https://github.com/harris-boyce/boycivenga-iac/actions/runs/20562567130"
+                "url": (
+                    "https://github.com/harris-boyce/boycivenga-iac"
+                    "/actions/runs/20562567130"
+                )
             }
         }
 

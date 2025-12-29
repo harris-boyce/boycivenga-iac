@@ -38,7 +38,10 @@ def trigger_plan(
             "success": True,
             "data": {
                 "run_id": "20562600000",
-                "url": "https://github.com/harris-boyce/boycivenga-iac/actions/runs/20562600000",
+                "url": (
+                    "https://github.com/harris-boyce/boycivenga-iac"
+                    "/actions/runs/20562600000"
+                ),
                 "workflow": "terraform-plan.yaml",
                 "inputs": {
                     "render_run_id": "20562567130",
@@ -55,12 +58,18 @@ def trigger_plan(
     """
     # Input validation
     if not render_run_id or not render_run_id.isdigit():
-        return {"success": False, "error": "render_run_id must be a numeric workflow run ID"}
+        return {
+            "success": False,
+            "error": "render_run_id must be a numeric workflow run ID",
+        }
 
     if site and not site.replace("-", "").replace("_", "").isalnum():
         return {
             "success": False,
-            "error": "site must contain only alphanumeric characters, hyphens, and underscores",
+            "error": (
+                "site must contain only alphanumeric characters, "
+                "hyphens, and underscores"
+            ),
         }
 
     if pr_number and not pr_number.isdigit():

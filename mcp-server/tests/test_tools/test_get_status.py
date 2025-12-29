@@ -8,8 +8,8 @@ from unittest.mock import MagicMock
 # Add parent directory to path for imports
 sys.path.insert(0, str(Path(__file__).parent.parent.parent / "src"))
 
-from boycivenga_mcp.github_client import GitHubClientError
-from boycivenga_mcp.tools.get_status import get_workflow_status
+from boycivenga_mcp.github_client import GitHubClientError  # noqa: E402
+from boycivenga_mcp.tools.get_status import get_workflow_status  # noqa: E402
 
 
 def test_get_workflow_status_success():

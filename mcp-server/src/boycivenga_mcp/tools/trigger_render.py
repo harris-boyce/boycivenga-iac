@@ -32,13 +32,18 @@ def trigger_render(github_client: GitHubClient) -> Dict[str, Any]:
             "success": True,
             "data": {
                 "run_id": "20562567130",
-                "url": "https://github.com/harris-boyce/boycivenga-iac/actions/runs/20562567130",
+                "url": (
+                    "https://github.com/harris-boyce/boycivenga-iac"
+                    "/actions/runs/20562567130"
+                ),
                 "workflow": "render-artifacts.yaml"
             }
         }
     """
     try:
-        run_id = github_client.trigger_workflow(workflow_file="render-artifacts.yaml", ref="main")
+        run_id = github_client.trigger_workflow(
+            workflow_file="render-artifacts.yaml", ref="main"
+        )
 
         # Construct URL for convenience
         repo = github_client.repo

@@ -39,14 +39,17 @@ class GitHubClient:
         self.repo = repo or os.getenv("GITHUB_REPO")
         if not self.repo:
             raise GitHubClientError(
-                "Repository must be provided or set via GITHUB_REPO environment variable"
+                "Repository must be provided or set via "
+                "GITHUB_REPO environment variable"
             )
 
         self.token = token or os.getenv("GITHUB_TOKEN")
 
         # Validate gh CLI is available
         try:
-            subprocess.run(["gh", "--version"], capture_output=True, check=True, text=True)
+            subprocess.run(
+                ["gh", "--version"], capture_output=True, check=True, text=True
+            )
         except (subprocess.CalledProcessError, FileNotFoundError) as e:
             raise GitHubClientError(f"GitHub CLI (gh) is not available: {e}")
 
@@ -111,7 +114,10 @@ class GitHubClient:
             raise GitHubClientError(f"Failed to parse gh output: {e}")
 
     def trigger_workflow(
-        self, workflow_file: str, ref: str = "main", inputs: Optional[Dict[str, str]] = None
+        self,
+        workflow_file: str,
+        ref: str = "main",
+        inputs: Optional[Dict[str, str]] = None,
     ) -> str:
         """Trigger a workflow dispatch event.
 

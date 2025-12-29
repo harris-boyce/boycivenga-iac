@@ -8,8 +8,8 @@ from unittest.mock import MagicMock
 # Add parent directory to path for imports
 sys.path.insert(0, str(Path(__file__).parent.parent.parent / "src"))
 
-from boycivenga_mcp.github_client import GitHubClientError
-from boycivenga_mcp.tools.trigger_render import trigger_render
+from boycivenga_mcp.github_client import GitHubClientError  # noqa: E402
+from boycivenga_mcp.tools.trigger_render import trigger_render  # noqa: E402
 
 
 def test_trigger_render_success():
@@ -35,7 +35,9 @@ def test_trigger_render_success():
 def test_trigger_render_error():
     """Test error handling in render workflow trigger."""
     mock_client = MagicMock()
-    mock_client.trigger_workflow.side_effect = GitHubClientError("Workflow trigger failed")
+    mock_client.trigger_workflow.side_effect = GitHubClientError(
+        "Workflow trigger failed"
+    )
 
     result = trigger_render(mock_client)
 

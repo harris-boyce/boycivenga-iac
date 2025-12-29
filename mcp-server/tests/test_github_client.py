@@ -11,7 +11,7 @@ from unittest.mock import MagicMock, patch
 # Add parent directory to path for imports
 sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
 
-from boycivenga_mcp.github_client import GitHubClient, GitHubClientError
+from boycivenga_mcp.github_client import GitHubClient, GitHubClientError  # noqa: E402
 
 
 def test_client_initialization_with_repo():
@@ -24,7 +24,9 @@ def test_client_initialization_with_repo():
 
 def test_client_initialization_from_env():
     """Test client reads from environment variables."""
-    with patch.dict(os.environ, {"GITHUB_REPO": "env/repo", "GITHUB_TOKEN": "env_token"}):
+    with patch.dict(
+        os.environ, {"GITHUB_REPO": "env/repo", "GITHUB_TOKEN": "env_token"}
+    ):
         client = GitHubClient()
         assert client.repo == "env/repo"
         assert client.token == "env_token"

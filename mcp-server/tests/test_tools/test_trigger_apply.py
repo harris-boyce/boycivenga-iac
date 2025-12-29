@@ -8,8 +8,8 @@ from unittest.mock import MagicMock
 # Add parent directory to path for imports
 sys.path.insert(0, str(Path(__file__).parent.parent.parent / "src"))
 
-from boycivenga_mcp.github_client import GitHubClientError
-from boycivenga_mcp.tools.trigger_apply import trigger_apply
+from boycivenga_mcp.github_client import GitHubClientError  # noqa: E402
+from boycivenga_mcp.tools.trigger_apply import trigger_apply  # noqa: E402
 
 
 def test_trigger_apply_success():
@@ -19,7 +19,10 @@ def test_trigger_apply_success():
     mock_client.repo = "harris-boyce/boycivenga-iac"
 
     result = trigger_apply(
-        plan_run_id="20562600000", site="pennington", pr_number="42", github_client=mock_client
+        plan_run_id="20562600000",
+        site="pennington",
+        pr_number="42",
+        github_client=mock_client,
     )
 
     assert result["success"] is True
@@ -57,7 +60,10 @@ def test_trigger_apply_invalid_plan_run_id():
     mock_client = MagicMock()
 
     result = trigger_apply(
-        plan_run_id="not-a-number", site="pennington", pr_number="42", github_client=mock_client
+        plan_run_id="not-a-number",
+        site="pennington",
+        pr_number="42",
+        github_client=mock_client,
     )
 
     assert result["success"] is False
@@ -70,7 +76,9 @@ def test_trigger_apply_missing_site():
     """Test validation when site is missing."""
     mock_client = MagicMock()
 
-    result = trigger_apply(plan_run_id="12345", site="", pr_number="42", github_client=mock_client)
+    result = trigger_apply(
+        plan_run_id="12345", site="", pr_number="42", github_client=mock_client
+    )
 
     assert result["success"] is False
     assert "site is required" in result["error"]
@@ -114,7 +122,10 @@ def test_trigger_apply_invalid_pr_number():
     mock_client = MagicMock()
 
     result = trigger_apply(
-        plan_run_id="12345", site="pennington", pr_number="not-a-number", github_client=mock_client
+        plan_run_id="12345",
+        site="pennington",
+        pr_number="not-a-number",
+        github_client=mock_client,
     )
 
     assert result["success"] is False
@@ -130,7 +141,10 @@ def test_trigger_apply_valid_site_with_hyphens():
     mock_client.repo = "harris-boyce/boycivenga-iac"
 
     result = trigger_apply(
-        plan_run_id="12345", site="count-fleet-court", pr_number="42", github_client=mock_client
+        plan_run_id="12345",
+        site="count-fleet-court",
+        pr_number="42",
+        github_client=mock_client,
     )
 
     assert result["success"] is True
@@ -142,10 +156,15 @@ def test_trigger_apply_valid_site_with_hyphens():
 def test_trigger_apply_error():
     """Test error handling in apply workflow trigger."""
     mock_client = MagicMock()
-    mock_client.trigger_workflow.side_effect = GitHubClientError("Workflow trigger failed")
+    mock_client.trigger_workflow.side_effect = GitHubClientError(
+        "Workflow trigger failed"
+    )
 
     result = trigger_apply(
-        plan_run_id="12345", site="pennington", pr_number="42", github_client=mock_client
+        plan_run_id="12345",
+        site="pennington",
+        pr_number="42",
+        github_client=mock_client,
     )
 
     assert result["success"] is False
