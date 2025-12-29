@@ -111,15 +111,18 @@ jobs:
           fi
 
           # Check that the plan run exists and completed successfully
-          echo "Verifying plan workflow run..."
-          RUN_STATUS=$(gh run view "$PLAN_RUN_ID" --json conclusion --jq '.conclusion' 2>&1)
-
-          if [ $? -ne 0 ]; then
+          echo "Verifying plan workflow run $PLAN_RUN_ID..."
+          if ! RUN_STATUS=$(gh run view "$PLAN_RUN_ID" --json conclusion --jq '.conclusion' 2>&1); then
             echo "❌ ERROR: Failed to fetch workflow run $PLAN_RUN_ID"
+            echo ""
+            echo "   gh CLI output:"
+            echo "$RUN_STATUS" | sed 's/^/     /'
+            echo ""
             echo "   This may indicate:"
             echo "   - The run ID is invalid"
             echo "   - You don't have permission to view the run"
             echo "   - The run has been deleted"
+            echo "   - Network or API connectivity issue"
             exit 1
           fi
 
@@ -134,7 +137,15 @@ jobs:
           echo ""
 
           # Verify the workflow name matches terraform-plan
-          WORKFLOW_NAME=$(gh run view "$PLAN_RUN_ID" --json workflowName --jq '.workflowName')
+          echo "Verifying workflow type..."
+          if ! WORKFLOW_NAME=$(gh run view "$PLAN_RUN_ID" --json workflowName --jq '.workflowName' 2>&1); then
+            echo "❌ ERROR: Failed to fetch workflow name for run $PLAN_RUN_ID"
+            echo ""
+            echo "   gh CLI output:"
+            echo "$WORKFLOW_NAME" | sed 's/^/     /'
+            exit 1
+          fi
+
           if [ "$WORKFLOW_NAME" != "Terraform Plan" ]; then
             echo "❌ ERROR: Run $PLAN_RUN_ID is not a Terraform Plan workflow"
             echo "   Found workflow: $WORKFLOW_NAME"
