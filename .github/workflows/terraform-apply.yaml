@@ -264,6 +264,8 @@ jobs:
         with:
           artifact-path: 'artifacts/tfvars/site-${{ needs.validate-inputs.outputs.site }}.tfvars.json'
           environment: 'prod'
+          repo-owner: ${{ github.repository_owner }}
+          repo-name: ${{ github.event.repository.name }}
 
       - name: Verify plan file integrity
         id: verify-plan

@@ -9,6 +9,8 @@ A composite GitHub Action that verifies artifact attestations with fail-closed b
   uses: ./.github/actions/verify-attestation
   with:
     artifact-path: 'artifacts/tfvars/*.json'
+    repo-owner: ${{ github.repository_owner }}
+    repo-name: ${{ github.event.repository.name }}
 ```
 
 ## Documentation
@@ -30,6 +32,8 @@ See [docs/phase4/attestation-gate.md](../../../docs/phase4/attestation-gate.md) 
   with:
     artifact-path: 'artifacts/tfvars/*.json'
     environment: 'prod'  # Optional, this is the default
+    repo-owner: ${{ github.repository_owner }}
+    repo-name: ${{ github.event.repository.name }}
 ```
 
 ### Development (With Bypass)
@@ -40,6 +44,8 @@ See [docs/phase4/attestation-gate.md](../../../docs/phase4/attestation-gate.md) 
     artifact-path: 'artifacts/tfvars/*.json'
     environment: 'dev'
     allow-bypass: 'true'
+    repo-owner: ${{ github.repository_owner }}
+    repo-name: ${{ github.event.repository.name }}
 ```
 
 ## Inputs
@@ -49,6 +55,8 @@ See [docs/phase4/attestation-gate.md](../../../docs/phase4/attestation-gate.md) 
 | `artifact-path` | Yes | - | Path or glob pattern to artifacts |
 | `environment` | No | `prod` | `prod` (fail-closed) or `dev` (allow bypass) |
 | `allow-bypass` | No | `false` | Allow bypass (only in dev mode) |
+| `repo-owner` | Yes | - | Repository owner (use `${{ github.repository_owner }}`) |
+| `repo-name` | Yes | - | Repository name (use `${{ github.event.repository.name }}`) |
 
 ## Outputs
 
