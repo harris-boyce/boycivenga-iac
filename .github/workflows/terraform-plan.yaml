@@ -208,6 +208,8 @@ jobs:
         with:
           artifact-path: 'artifacts/tfvars/site-${{ matrix.site }}.tfvars.json'
           environment: 'prod'
+          repo-owner: ${{ github.repository_owner }}
+          repo-name: ${{ github.event.repository.name }}
 
       - name: Set up Terraform
         if: steps.check-site.outputs.skip != 'true'
