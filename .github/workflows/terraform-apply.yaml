@@ -73,6 +73,9 @@ jobs:
       approval_required: ${{ steps.check-approval.outputs.approval_required }}
       environment_name: ${{ steps.check-approval.outputs.environment_name }}
     steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
       - name: Validate workflow inputs
         id: validate
         env:
