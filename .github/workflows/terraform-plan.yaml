@@ -66,30 +66,38 @@ jobs:
     # APPROVAL GATE: Only run on approved PRs or manual dispatch
     # - For PR reviews: Only process if review state is 'approved'
     # - For manual dispatch: Always allow (for testing/emergency)
-    # - Skip matrix items if a specific site was requested
     if: |
-      (
-        (github.event_name == 'workflow_dispatch') ||
-        (github.event_name == 'pull_request_review' && github.event.review.state == 'approved')
-      ) && (
-        github.event_name != 'workflow_dispatch' ||
-        github.event.inputs.site == '' ||
-        github.event.inputs.site == matrix.site
-      )
+      (github.event_name == 'workflow_dispatch') ||
+      (github.event_name == 'pull_request_review' && github.event.review.state == 'approved')
 
     strategy:
       matrix:
         # Define sites - this could be dynamically generated in the future
-        site: [pennington, countfleetcourt]
+        site: [pennington, count-fleet-court]
       fail-fast: false
 
     steps:
+      - name: Check if site should be processed
+        id: check-site
+        run: |
+          # Skip this matrix item if a specific site was requested and it doesn't match
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ] && \
+             [ -n "${{ github.event.inputs.site }}" ] && \
+             [ "${{ github.event.inputs.site }}" != "${{ matrix.site }}" ]; then
+            echo "skip=true" >> $GITHUB_OUTPUT
+            echo "⏭️  Skipping site ${{ matrix.site }} (requested: ${{ github.event.inputs.site }})"
+          else
+            echo "skip=false" >> $GITHUB_OUTPUT
+            echo "✅ Processing site: ${{ matrix.site }}"
+          fi
+
       - name: Checkout repository
+        if: steps.check-site.outputs.skip != 'true'
         uses: actions/checkout@v4
 
       - name: Extract PR metadata (for approval events)
         id: pr-metadata
-        if: github.event_name == 'pull_request_review'
+        if: steps.check-site.outputs.skip != 'true' && github.event_name == 'pull_request_review'
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
@@ -137,6 +145,7 @@ jobs:
           echo "✅ Found render run ID: $RENDER_RUN_ID"
 
       - name: Determine render run ID
+        if: steps.check-site.outputs.skip != 'true'
         id: determine-run
         env:
           GH_TOKEN: ${{ github.token }}
@@ -160,6 +169,7 @@ jobs:
           echo "✅ Will use artifacts from run: $RUN_ID"
 
       - name: Download attested artifacts
+        if: steps.check-site.outputs.skip != 'true'
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
@@ -186,6 +196,7 @@ jobs:
           ls -lh artifacts/tfvars/
 
       - name: Verify artifact attestations (REQUIRED)
+        if: steps.check-site.outputs.skip != 'true'
         id: verify-attestation
         # SECURITY BOUNDARY ENFORCEMENT:
         # This step is MANDATORY and enforces the trust boundary contract.
@@ -199,11 +210,13 @@ jobs:
           environment: 'prod'
 
       - name: Set up Terraform
+        if: steps.check-site.outputs.skip != 'true'
         uses: hashicorp/setup-terraform@v3
         with:
           terraform_version: "~> 1.0"
 
       - name: Configure Terraform provider (stub mode)
+        if: steps.check-site.outputs.skip != 'true'
         run: |
           # Use stub/empty credentials for plan-only validation
           # This allows schema validation without actual UniFi controller access
@@ -221,6 +234,7 @@ jobs:
           echo "✅ Provider configuration set"
 
       - name: Terraform Init
+        if: steps.check-site.outputs.skip != 'true'
         working-directory: terraform
         run: |
           echo "🚀 Initializing Terraform..."
@@ -241,6 +255,7 @@ jobs:
           terraform providers
 
       - name: Terraform Validate
+        if: steps.check-site.outputs.skip != 'true'
         working-directory: terraform
         run: |
           echo "✅ Validating Terraform configuration..."
@@ -254,6 +269,7 @@ jobs:
           echo "✅ Configuration is valid"
 
       - name: Terraform Plan (Binary)
+        if: steps.check-site.outputs.skip != 'true'
         id: plan
         working-directory: terraform
         continue-on-error: true
@@ -296,7 +312,7 @@ jobs:
           exit 0
 
       - name: Terraform Show (JSON)
-        if: steps.plan.outputs.plan_status != 'failed'
+        if: steps.check-site.outputs.skip != 'true' && steps.plan.outputs.plan_status != 'failed'
         working-directory: terraform
         run: |
           PLAN_FILE="tfplan-${{ matrix.site }}.binary"
@@ -317,7 +333,7 @@ jobs:
           fi
 
       - name: Generate Structured Plan Diff
-        if: steps.plan.outputs.plan_status != 'failed'
+        if: steps.check-site.outputs.skip != 'true' && steps.plan.outputs.plan_status != 'failed'
         working-directory: terraform
         run: |
           JSON_FILE="tfplan-${{ matrix.site }}.json"
@@ -344,7 +360,7 @@ jobs:
 
       - name: Evaluate Policy with OPA
         id: policy
-        if: steps.plan.outputs.plan_status != 'failed'
+        if: steps.check-site.outputs.skip != 'true' && steps.plan.outputs.plan_status != 'failed'
         working-directory: terraform
         run: |
           PLAN_JSON="tfplan-${{ matrix.site }}.json"
@@ -475,7 +491,7 @@ jobs:
           fi
 
       - name: Record Approval Requirement
-        if: steps.policy.outputs.policy_result == 'pass'
+        if: steps.check-site.outputs.skip != 'true' && steps.policy.outputs.policy_result == 'pass'
         working-directory: terraform
         run: |
           APPROVAL_REQUIRED="${{ steps.policy.outputs.approval_required }}"
@@ -497,7 +513,7 @@ jobs:
 
       - name: Upload Terraform Plans
         uses: actions/upload-artifact@v4
-        if: always()
+        if: steps.check-site.outputs.skip != 'true' && always()
         with:
           name: terraform-plan-${{ matrix.site }}
           path: |
@@ -510,7 +526,7 @@ jobs:
           retention-days: 30
 
       - name: Plan Summary
-        if: always()
+        if: steps.check-site.outputs.skip != 'true' && always()
         run: |
           DIFF_FILE="terraform/tfplan-${{ matrix.site }}-diff.md"
           PR_NUM="${{ steps.determine-run.outputs.pr_number }}"

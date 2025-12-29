@@ -2,8 +2,8 @@
 # This file contains example configuration for the primary residence site
 
 site:
-  name: site-pennington
-  slug: site-pennington
+  name: Pennington
+  slug: pennington
   description: Primary residence
 
 # IP prefixes for the site

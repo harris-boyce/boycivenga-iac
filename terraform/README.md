@@ -91,7 +91,7 @@ See [Trust Boundary Documentation](../docs/phase3/terraform-boundary.md) for com
 Each site has its own tfvars file generated from NetBox exports:
 
 - `site-pennington.tfvars.json` - Configuration for Pennington site
-- `site-countfleetcourt.tfvars.json` - Configuration for Count Fleet Court site
+- `site-count-fleet-court.tfvars.json` - Configuration for Count Fleet Court site
 
 These files contain:
 - Site metadata (name, slug, description)

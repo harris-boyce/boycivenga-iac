@@ -3,26 +3,26 @@
   "_description": "This file demonstrates the minimal set of NetBox objects required for basic network intent management across multiple sites.",
   "sites": [
     {
-      "name": "site-pennington",
-      "slug": "site-pennington",
+      "name": "Pennington",
+      "slug": "pennington",
       "description": "Primary residence"
     },
     {
-      "name": "site-countfleetcourt",
-      "slug": "site-countfleetcourt",
+      "name": "Count Fleet Court",
+      "slug": "count-fleet-court",
       "description": "Secondary lab site"
     }
   ],
   "prefixes": [
     {
-      "site": "site-pennington",
+      "site": "pennington",
       "prefix": "192.168.10.0/24",
       "vlan": 10,
       "description": "Home LAN",
       "status": "active"
     },
     {
-      "site": "site-countfleetcourt",
+      "site": "count-fleet-court",
       "prefix": "192.168.20.0/24",
       "vlan": 20,
       "description": "Lab network",
@@ -31,14 +31,14 @@
   ],
   "vlans": [
     {
-      "site": "site-pennington",
+      "site": "pennington",
       "vlan_id": 10,
       "name": "Home LAN",
       "description": "Default VLAN for primary residence",
       "status": "active"
     },
     {
-      "site": "site-countfleetcourt",
+      "site": "count-fleet-court",
       "vlan_id": 20,
       "name": "Guest VLAN",
       "description": "Guest network for lab site",
