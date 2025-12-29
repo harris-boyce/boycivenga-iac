@@ -6,14 +6,14 @@ This directory contains example YAML configuration files for seeding NetBox with
 
 ### site-pennington.yaml
 Primary residence configuration:
-- **Site Name**: site-pennington
+- **Site Name**: pennington
 - **Description**: Primary residence
 - **Network**: 192.168.10.0/24
 - **VLAN ID**: 10 (Home VLAN)
 
 ### site-countfleetcourt.yaml
 Secondary site configuration:
-- **Site Name**: site-countfleetcourt
+- **Site Name**: count-fleet-court
 - **Description**: Secondary site
 - **Network**: 192.168.20.0/24
 - **VLAN ID**: 20 (Secondary VLAN)

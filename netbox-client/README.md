@@ -105,8 +105,8 @@ python netbox-client/scripts/seed_netbox.py netbox-client/examples/*.yaml
 ```
 
 **Example Sites:**
-- `site-pennington` - Primary residence with 192.168.10.0/24 network
-- `site-countfleetcourt` - Secondary site with 192.168.20.0/24 network
+- `pennington` - Primary residence with 192.168.10.0/24 network
+- `count-fleet-court` - Secondary site with 192.168.20.0/24 network
 
 **What gets created:**
 - Sites with descriptions
