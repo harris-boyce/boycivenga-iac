@@ -32,6 +32,7 @@ class TerraformRunner:
         self._copy_config()
 
         self.initialized = False
+        self.tfvars_file: Optional[Path] = None
 
     def _copy_config(self) -> None:
         """Copy Terraform configuration files to working directory."""
@@ -139,6 +140,9 @@ class TerraformRunner:
         if auto_approve:
             cmd.append("-auto-approve")
 
+        if self.tfvars_file:
+            cmd.append(f"-var-file={self.tfvars_file}")
+
         self._run_command(cmd)
 
     def destroy(self, auto_approve: bool = True) -> None:
@@ -154,6 +158,9 @@ class TerraformRunner:
 
         if auto_approve:
             cmd.append("-auto-approve")
+
+        if self.tfvars_file:
+            cmd.append(f"-var-file={self.tfvars_file}")
 
         self._run_command(cmd, check=False)  # Don't fail if nothing to destroy
 
@@ -196,6 +203,7 @@ class TerraformRunner:
         tfvars_file = self.work_dir / filename
         with open(tfvars_file, "w") as f:
             json.dump(variables, f, indent=2)
+        self.tfvars_file = tfvars_file
         return tfvars_file
 
     def cleanup(self) -> None:

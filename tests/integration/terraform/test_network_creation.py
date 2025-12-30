@@ -18,12 +18,20 @@ def test_create_simple_network(
     - Resources appear in UniFi controller
     - Resources can be destroyed
     """
-    # Update vars with a test VLAN
+    # Update vars with a test VLAN and corresponding network prefix
     terraform_vars["vlans"] = [
         {
             "vlan_id": 100,
             "name": test_network_name,
             "description": "Integration test network",
+            "status": "active",
+        }
+    ]
+    terraform_vars["prefixes"] = [
+        {
+            "cidr": "10.100.0.0/24",
+            "vlan_id": 100,
+            "description": "Integration test network prefix",
             "status": "active",
         }
     ]
@@ -65,6 +73,14 @@ def test_create_network_with_vlan(
             "status": "active",
         }
     ]
+    terraform_vars["prefixes"] = [
+        {
+            "cidr": "10.200.0.0/24",
+            "vlan_id": vlan_id,
+            "description": "VLAN test network prefix",
+            "status": "active",
+        }
+    ]
 
     terraform_runner.write_tfvars(terraform_vars)
 
@@ -97,6 +113,14 @@ def test_update_network(
             "vlan_id": 300,
             "name": test_network_name,
             "description": "Original description",
+            "status": "active",
+        }
+    ]
+    terraform_vars["prefixes"] = [
+        {
+            "cidr": "10.300.0.0/24",
+            "vlan_id": 300,
+            "description": "Original prefix description",
             "status": "active",
         }
     ]
@@ -134,6 +158,14 @@ def test_delete_network(
             "vlan_id": 400,
             "name": test_network_name,
             "description": "Test deletion",
+            "status": "active",
+        }
+    ]
+    terraform_vars["prefixes"] = [
+        {
+            "cidr": "10.400.0.0/24",
+            "vlan_id": 400,
+            "description": "Test deletion prefix",
             "status": "active",
         }
     ]

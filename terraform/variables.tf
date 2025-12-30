@@ -5,14 +5,12 @@
 variable "unifi_username" {
   description = "UniFi controller username"
   type        = string
-  default     = ""
   sensitive   = true
 }
 
 variable "unifi_password" {
   description = "UniFi controller password"
   type        = string
-  default     = ""
   sensitive   = true
 }
 

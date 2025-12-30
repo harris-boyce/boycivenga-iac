@@ -7,8 +7,9 @@ import os
 import uuid
 
 import pytest
-from helpers.terraform_runner import TerraformRunner
-from helpers.unifi_client import UniFiClient
+
+from .helpers.terraform_runner import TerraformRunner
+from .helpers.unifi_client import UniFiClient
 
 
 def pytest_configure(config):
@@ -101,14 +102,10 @@ def terraform_vars():
     """Get Terraform variables from environment.
 
     Returns dictionary of variables compatible with write_tfvars().
+    Note: UniFi provider credentials (username, password, api_url, allow_insecure)
+    are read from TF_VAR_* environment variables and should not be included here.
     """
     return {
-        "unifi_username": os.getenv("TF_VAR_unifi_username", "admin"),
-        "unifi_password": os.getenv(
-            "TF_VAR_unifi_password", "unifi-integration-test-password"
-        ),
-        "unifi_api_url": os.getenv("TF_VAR_unifi_api_url", "https://localhost:8443"),
-        "unifi_allow_insecure": True,
         # Minimal site configuration for testing
         "site_name": "Test Site",
         "site_slug": "test",

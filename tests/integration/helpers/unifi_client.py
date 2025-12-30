@@ -147,6 +147,119 @@ class UniFiClient:
         )
         response.raise_for_status()
 
+    def update_network(
+        self, network_id: str, config: Dict[str, Any], site: str = "default"
+    ) -> Dict[str, Any]:
+        """Update an existing network.
+
+        Args:
+            network_id: Network ID to update
+            config: Network configuration dictionary
+            site: Site name (default: "default")
+
+        Returns:
+            Updated network dictionary
+        """
+        self._ensure_logged_in()
+
+        headers = {}
+        if self._csrf_token:
+            headers["X-CSRF-Token"] = self._csrf_token
+
+        response = self.session.put(
+            f"{self.url}/api/s/{site}/rest/networkconf/{network_id}",
+            json=config,
+            headers=headers,
+        )
+        response.raise_for_status()
+
+        data = response.json()
+        result_data = data.get("data", [])
+        if isinstance(result_data, list) and len(result_data) > 0:
+            return result_data[0]
+        else:
+            # If update doesn't return data, query to get the updated network
+            networks = self.get_networks(site)
+            return next((net for net in networks if net["_id"] == network_id), config)
+
+    def find_network_by_name(
+        self, name: str, site: str = "default"
+    ) -> Optional[Dict[str, Any]]:
+        """Find a network by name.
+
+        Args:
+            name: Network name to search for
+            site: Site name (default: "default")
+
+        Returns:
+            Network dictionary if found, None otherwise
+        """
+        networks = self.get_networks(site)
+        return next((net for net in networks if net.get("name") == name), None)
+
+    def find_network_by_vlan(
+        self, vlan_id: int, site: str = "default"
+    ) -> Optional[Dict[str, Any]]:
+        """Find a network by VLAN ID.
+
+        Args:
+            vlan_id: VLAN ID to search for
+            site: Site name (default: "default")
+
+        Returns:
+            Network dictionary if found, None otherwise
+        """
+        networks = self.get_networks(site)
+        return next((net for net in networks if net.get("vlan") == vlan_id), None)
+
+    def create_or_update_network(
+        self, config: Dict[str, Any], site: str = "default"
+    ) -> Dict[str, Any]:
+        """Create or update a network (idempotent operation).
+
+        Checks if network exists by name. If it exists, updates it.
+        If it doesn't exist, creates it.
+
+        Args:
+            config: Network configuration dictionary (must include 'name')
+            site: Site name (default: "default")
+
+        Returns:
+            Network dictionary (created or updated)
+        """
+        name = config.get("name")
+        if not name:
+            raise ValueError("Network config must include 'name' field")
+
+        existing = self.find_network_by_name(name, site)
+
+        if existing:
+            # Update existing network
+            network_id = existing["_id"]
+            # Merge existing config with updates
+            updated_config = {**existing, **config}
+            return self.update_network(network_id, updated_config, site)
+        else:
+            # Create new network
+            headers = {}
+            if self._csrf_token:
+                headers["X-CSRF-Token"] = self._csrf_token
+
+            response = self.session.post(
+                f"{self.url}/api/s/{site}/rest/networkconf",
+                json=config,
+                headers=headers,
+            )
+            response.raise_for_status()
+
+            data = response.json()
+            result_data = data.get("data", [])
+            if isinstance(result_data, list) and len(result_data) > 0:
+                return result_data[0]
+            else:
+                # If no data returned, query to get the created network
+                return self.find_network_by_name(name, site) or config
+
     def delete_network_by_name(self, name: str, site: str = "default") -> bool:
         """Delete a network by name.
 
