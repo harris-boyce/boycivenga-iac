@@ -1,15 +1,15 @@
 {
   "name": "IaC DevContainer",
-  "build": {
-    "dockerfile": "Dockerfile",
-    "cacheFrom": "ghcr.io/${localWorkspaceFolderBasename}/devcontainer:latest"
-  },
+  "dockerComposeFile": "docker-compose.yml",
+  "service": "devcontainer",
+  "workspaceFolder": "/workspaces/${localWorkspaceFolderBasename}",
+
   "features": {
     "ghcr.io/devcontainers/features/docker-in-docker:2": {},
     "ghcr.io/devcontainers/features/terraform:1": {},
     "ghcr.io/devcontainers/features/github-cli:1": {}
   },
-  "postCreateCommand": "bash -c 'set -e; pre-commit install 2>/dev/null || true; cd mcp-server && pip install -e . && echo \"✅ MCP server installed successfully\"'",
+  "postCreateCommand": "bash -c 'set -e; pre-commit install 2>/dev/null || true; cd mcp-server && pip install -e . && echo \"✅ MCP server installed successfully\"; bash scripts/wait-for-unifi.sh && echo \"✅ UniFi controller ready\"'",
 
   "customizations": {
     "vscode": {
