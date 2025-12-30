@@ -14,6 +14,7 @@ Detects:
 
 import argparse
 import json
+import os
 import sys
 from pathlib import Path
 from typing import Any, Dict, List, Optional
@@ -292,6 +293,15 @@ def main():
     else:
         repo_root = Path(__file__).parent.parent
         state_file = repo_root / "state" / f"{args.site}-networks.json"
+
+    # Production safety check: Insecure TLS must never be enabled in CI/CD
+    if os.getenv("GITHUB_ACTIONS") == "true":
+        allow_insecure = os.getenv("TF_VAR_unifi_allow_insecure", "").lower()
+        if allow_insecure == "true":
+            print("❌ SECURITY ERROR: Insecure TLS is not allowed in GitHub Actions")
+            print("   Set TF_VAR_unifi_allow_insecure=false in production")
+            print("   Insecure TLS is only permitted for local development")
+            return 1
 
     # Load desired state from tfvars
     print(f"Loading desired state from: {args.tfvars}")

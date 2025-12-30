@@ -7,6 +7,7 @@ This script provides an alternative to Terraform when the provider has issues.
 
 import argparse
 import hashlib
+import ipaddress
 import json
 import os
 import sys
@@ -52,39 +53,75 @@ def calculate_file_checksum(file_path: Path) -> str:
     return f"sha256:{sha256.hexdigest()}"
 
 
-def calculate_dhcp_range(cidr: str) -> tuple[str, str]:
+def calculate_dhcp_range(
+    cidr: str, start_offset: int = 6, end_offset: int = 254
+) -> tuple[str, str]:
     """Calculate DHCP start/stop from CIDR.
+
+    UniFi reserves .1-.5 for system use:
+    - .1 = Gateway
+    - .2-.5 = Reserved for controller, DNS, etc.
+
+    Default range: .6 to .254 (or last usable IP if subnet is smaller)
 
     Args:
         cidr: Network CIDR (e.g., "10.100.0.0/24")
+        start_offset: IP offset for DHCP start (default: 6)
+        end_offset: IP offset for DHCP end (default: 254)
 
     Returns:
         Tuple of (dhcp_start, dhcp_stop)
-    """
-    # Simple implementation: .6 to .254
-    # Example: 10.100.0.0/24 -> 10.100.0.6 to 10.100.0.254
-    network = cidr.split("/")[0]
-    octets = network.split(".")
-    base = ".".join(octets[:3])
 
-    return (f"{base}.6", f"{base}.254")
+    Raises:
+        ValueError: If CIDR is invalid or subnet too small
+    """
+    try:
+        network = ipaddress.IPv4Network(cidr, strict=False)
+    except (ValueError, ipaddress.AddressValueError) as e:
+        raise ValueError(f"Invalid CIDR format '{cidr}': {e}") from e
+
+    # Validate subnet is large enough for DHCP
+    # Need at least network + gateway + 1 reserved + 2 DHCP IPs + broadcast = 5 minimum
+    usable_ips = network.num_addresses - 2  # Exclude network and broadcast
+    if usable_ips < start_offset + 2:
+        raise ValueError(
+            f"Subnet {cidr} too small for DHCP range "
+            f"(only {usable_ips} usable IPs, need at least {start_offset + 2})"
+        )
+
+    # Calculate start and end IPs
+    start_ip = network.network_address + start_offset
+    # Use minimum of end_offset and last usable IP
+    # (usable_ips already excludes broadcast)
+    max_offset = min(end_offset, usable_ips)
+    end_ip = network.network_address + max_offset
+
+    return (str(start_ip), str(end_ip))
 
 
 def cidr_to_gateway(cidr: str) -> str:
     """Convert network CIDR to gateway IP with mask.
+
+    UniFi API requires gateway IP format (e.g., "10.100.0.1/24")
+    not network address format (e.g., "10.100.0.0/24").
 
     Args:
         cidr: Network CIDR (e.g., "10.100.0.0/24")
 
     Returns:
         Gateway IP with mask (e.g., "10.100.0.1/24")
+
+    Raises:
+        ValueError: If CIDR is invalid
     """
-    network, mask = cidr.split("/")
-    octets = network.split(".")
-    # Use .1 as gateway
-    octets[-1] = "1"
-    gateway = ".".join(octets)
-    return f"{gateway}/{mask}"
+    try:
+        network = ipaddress.IPv4Network(cidr, strict=False)
+    except (ValueError, ipaddress.AddressValueError) as e:
+        raise ValueError(f"Invalid CIDR format '{cidr}': {e}") from e
+
+    # Gateway is always .1 (first usable IP)
+    gateway = network.network_address + 1
+    return f"{gateway}/{network.prefixlen}"
 
 
 def build_network_config(
@@ -152,7 +189,10 @@ def build_desired_state(tfvars: Dict[str, Any]) -> List[Dict[str, Any]]:
 
 
 def apply_networks(
-    client: UniFiClient, desired_networks: List[Dict[str, Any]], site: str = "default"
+    client: UniFiClient,
+    desired_networks: List[Dict[str, Any]],
+    site: str = "default",
+    fail_fast: bool = False,
 ) -> Dict[str, Any]:
     """Apply network configurations to UniFi controller.
 
@@ -160,42 +200,74 @@ def apply_networks(
         client: Authenticated UniFi client
         desired_networks: List of network configurations to apply
         site: Site name (default: "default")
+        fail_fast: If True, abort on first failure. If False, collect all failures.
 
     Returns:
-        Dictionary with results: created, updated, unchanged counts and network details
+        Dictionary with results: created, updated, unchanged, failures,
+        and current_state
+
+    Note:
+        When fail_fast=False, partial state is still saved for successful
+        operations. This allows recovery from partial failures.
     """
     created = []
     updated = []
     unchanged = []
+    failures = []
+
+    # PERFORMANCE: Fetch all networks once and cache for lookups
+    # Avoids repeated API calls in find_network_by_name()
+    print("Fetching existing networks from controller...")
+    all_networks = client.get_networks(site)
+    network_cache = {net["name"]: net for net in all_networks}
+    print(f"  Found {len(all_networks)} existing network(s)")
 
     for network_config in desired_networks:
         name = network_config["name"]
         print(f"Processing network: {name}")
 
         try:
-            # Use idempotent create_or_update
-            result = client.create_or_update_network(network_config, site)
+            # Check cache instead of making repeated API calls
+            existing = network_cache.get(name)
 
-            # Determine if it was created or updated by checking if it existed before
-            existing = client.find_network_by_name(name, site)
-            if existing and existing.get("_id") == result.get("_id"):
-                # Check if anything actually changed
-                # For simplicity, consider create_or_update as update if existed
+            if existing:
+                # Update existing network
+                network_id = existing["_id"]
+                updated_config = {**existing, **network_config}
+                result = client.update_network(network_id, updated_config, site)
                 updated.append(result)
                 vlan_id = network_config.get("vlan")
                 print(f"  ✓ Updated: {name} (VLAN {vlan_id})")
+                # Update cache with new result
+                network_cache[name] = result
             else:
+                # Create new network
+                result = client.create_or_update_network(network_config, site)
                 created.append(result)
                 print(f"  ✓ Created: {name} (VLAN {network_config.get('vlan')})")
+                # Add to cache
+                network_cache[name] = result
 
         except Exception as e:
-            print(f"  ✗ Error processing {name}: {e}")
-            raise
+            error_msg = str(e)
+            print(f"  ✗ Error processing {name}: {error_msg}")
+            failures.append(
+                {
+                    "network": name,
+                    "vlan_id": network_config.get("vlan"),
+                    "error": error_msg,
+                    "config": network_config,
+                }
+            )
+
+            if fail_fast:
+                raise
 
     return {
         "created": created,
         "updated": updated,
         "unchanged": unchanged,
+        "failures": failures,
         "current_state": created + updated + unchanged,
     }
 
@@ -267,6 +339,11 @@ def main():
         action="store_true",
         help="Preview changes without applying",
     )
+    parser.add_argument(
+        "--fail-fast",
+        action="store_true",
+        help="Abort on first failure (default: continue and collect all failures)",
+    )
 
     args = parser.parse_args()
 
@@ -276,6 +353,15 @@ def main():
     else:
         repo_root = Path(__file__).parent.parent
         state_file = repo_root / "state" / f"{args.site}-networks.json"
+
+    # Production safety check: Insecure TLS must never be enabled in CI/CD
+    if os.getenv("GITHUB_ACTIONS") == "true":
+        allow_insecure = os.getenv("TF_VAR_unifi_allow_insecure", "").lower()
+        if allow_insecure == "true":
+            print("❌ SECURITY ERROR: Insecure TLS is not allowed in GitHub Actions")
+            print("   Set TF_VAR_unifi_allow_insecure=false in production")
+            print("   Insecure TLS is only permitted for local development")
+            return 1
 
     # Load tfvars
     print(f"Loading tfvars from: {args.tfvars}")
@@ -304,18 +390,35 @@ def main():
     net_count = len(desired_networks)
     print(f"\nApplying {net_count} network(s)...")
     try:
-        result = apply_networks(client, desired_networks, args.site)
+        result = apply_networks(client, desired_networks, args.site, args.fail_fast)
 
         print("\nSummary:")
         print(f"  Created: {len(result['created'])}")
         print(f"  Updated: {len(result['updated'])}")
         print(f"  Unchanged: {len(result['unchanged'])}")
 
-        # Save state
+        # Report failures if any
+        if result["failures"]:
+            print(f"  Failed: {len(result['failures'])}")
+            print("\nFailed networks:")
+            for failure in result["failures"]:
+                net_name = failure["network"]
+                vlan_id = failure["vlan_id"]
+                error = failure["error"]
+                print(f"  ✗ {net_name} (VLAN {vlan_id}): {error}")
+
+        # Save state even if some failed (partial state for recovery)
+        # Only save successful networks
         save_state(result, state_file, tfvars_checksum, args.site)
 
-        print("\n✓ Apply completed successfully")
-        return 0
+        if result["failures"]:
+            print("\n⚠️  Apply completed with failures")
+            print("   Partial state saved for successful networks")
+            print("   Review errors above and re-run to retry failed networks")
+            return 1
+        else:
+            print("\n✓ Apply completed successfully")
+            return 0
 
     except Exception as e:
         print(f"\n✗ Apply failed: {e}")
