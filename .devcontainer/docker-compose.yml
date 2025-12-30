@@ -1,0 +1,118 @@
+---
+# Docker Compose configuration for devcontainer with UniFi Network Application sidecar
+# Provides integration testing infrastructure for Terraform UniFi provider and MCP server workflows
+
+services:
+  # Main development container
+  devcontainer:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      cache_from:
+        - ghcr.io/harris-boyce/boycivenga-iac/devcontainer:latest
+
+    volumes:
+      - ../..:/workspaces:cached
+
+    # Share network with UniFi container for localhost access
+    network_mode: service:unifi-network-app
+
+    # Auto-configure environment for integration testing
+    environment:
+      # Terraform UniFi provider configuration
+      TF_VAR_unifi_username: "admin"
+      TF_VAR_unifi_password: "unifi-integration-test-password"
+      TF_VAR_unifi_api_url: "https://localhost:8443"
+      TF_VAR_unifi_allow_insecure: "true"
+
+      # Integration test environment markers
+      UNIFI_INTEGRATION_TESTS_ENABLED: "true"
+      UNIFI_TEST_CONTROLLER_URL: "https://localhost:8443"
+
+    # Wait for dependencies to be healthy before starting
+    depends_on:
+      mongodb:
+        condition: service_healthy
+      unifi-network-app:
+        condition: service_healthy
+
+    # Override default command to keep container running
+    command: sleep infinity
+
+  # MongoDB - required dependency for UniFi Network Application
+  mongodb:
+    image: mongo:7.0
+    container_name: unifi-mongodb
+    restart: unless-stopped
+
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: unifi
+      MONGO_INITDB_ROOT_PASSWORD: unifi-mongo-password
+      MONGO_INITDB_DATABASE: unifi
+
+    # Ephemeral volumes - fresh state on each devcontainer rebuild
+    volumes:
+      - unifi-mongodb-data:/data/db
+      - unifi-mongodb-config:/data/configdb
+
+    # Health check to ensure MongoDB is ready before UniFi starts
+    healthcheck:
+      test: ["CMD", "mongosh", "--eval", "db.adminCommand('ping')"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+
+  # UniFi Network Application - integration test target
+  unifi-network-app:
+    image: lscr.io/linuxserver/unifi-network-application:latest
+    container_name: unifi-test-controller
+    restart: unless-stopped
+
+    environment:
+      # LinuxServer.io container variables
+      PUID: 1000
+      PGID: 1000
+      TZ: Etc/UTC
+
+      # MongoDB connection configuration
+      MONGO_USER: unifi
+      MONGO_PASS: unifi-mongo-password
+      MONGO_HOST: mongodb
+      MONGO_PORT: 27017
+      MONGO_DBNAME: unifi
+      MONGO_AUTHSOURCE: admin
+
+      # Memory settings for container
+      MEM_LIMIT: 1024
+      MEM_STARTUP: 1024
+
+    ports:
+      - "8443:8443"      # HTTPS web interface
+      - "8080:8080"      # HTTP device communication
+      - "3478:3478/udp"  # STUN
+      - "10001:10001/udp" # Device discovery
+
+    volumes:
+      - unifi-config:/config
+
+    depends_on:
+      mongodb:
+        condition: service_healthy
+
+    # Health check for UniFi controller readiness
+    healthcheck:
+      test: ["CMD", "curl", "-k", "-f", "https://localhost:8443/status"]
+      interval: 15s
+      timeout: 10s
+      retries: 10
+      start_period: 120s  # UniFi takes 60-90s to initialize
+
+# Named volumes - ephemeral, recreated on devcontainer rebuild
+volumes:
+  unifi-mongodb-data:
+    name: unifi-test-mongodb-data
+  unifi-mongodb-config:
+    name: unifi-test-mongodb-config
+  unifi-config:
+    name: unifi-test-config
