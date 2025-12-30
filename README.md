@@ -1,5 +1,7 @@
 # boycivenga-iac
-Terraform repository for managing all things home networking, lab, smart home automations, etc.
+Infrastructure-as-Code repository for managing home networking, lab, and smart home automations via UniFi API.
+
+> **Note**: This repository originally used Terraform but has migrated to direct UniFi API integration due to Terraform provider compatibility issues. All security boundaries (attestation, policy, approval) remain intact.
 
 ## ⚠️ Security & Authority Boundaries
 
@@ -9,19 +11,20 @@ This repository has explicit security and authority boundaries that MUST be resp
 
 ### 🎯 Authority Boundary
 
-**NetBox is the SOLE authoritative source of infrastructure intent. Terraform is NOT an authority.**
+**NetBox is the SOLE authoritative source of infrastructure intent. Apply scripts are NOT an authority.**
 
 - ✅ All infrastructure definitions MUST originate from NetBox
-- ❌ DO NOT define infrastructure intent directly in Terraform
+- ❌ DO NOT define infrastructure intent directly in apply scripts or configuration files
 - ❌ DO NOT create manual variable files outside the render pipeline
 
 ### 🔒 Execution Boundary
 
-**Only GitHub Actions may execute Terraform plan operations. Manual execution is PROHIBITED.**
+**Only GitHub Actions may execute infrastructure apply operations. Manual execution is PROHIBITED.**
 
-- ✅ All Terraform operations MUST run in GitHub Actions workflows
-- ❌ DO NOT run `terraform plan` or `terraform apply` locally
+- ✅ All apply operations MUST run in GitHub Actions workflows
+- ❌ DO NOT run apply scripts (`apply_via_unifi.py`) locally outside testing
 - ❌ DO NOT use alternative CI/CD systems
+- ℹ️  Local execution of plan scripts (`plan_unifi.py`) is permitted for drift detection
 
 ### 🛡️ Security Boundary
 
@@ -37,10 +40,10 @@ This repository has explicit security and authority boundaries that MUST be resp
 
 Before contributing, verify you understand:
 
-- [ ] NetBox is authoritative for intent; Terraform is for implementation only
+- [ ] NetBox is authoritative for intent; apply scripts implement the desired state
 - [ ] GitHub Actions is the only permitted execution environment
 - [ ] Attestation verification is mandatory and cannot be bypassed in production
-- [ ] Manual artifacts and local Terraform execution are prohibited
+- [ ] Manual artifacts and local apply script execution are prohibited (plan scripts permitted)
 - [ ] All boundaries are documented in [docs/phase4/security.md](docs/phase4/security.md)
 
 ## Repository Layout
@@ -48,9 +51,9 @@ Before contributing, verify you understand:
 This repository is organized into the following top-level directories:
 
 - **`netbox-client/`** – Tools and scripts for interacting with the NetBox API and managing network intent data
-- **`terraform/`** – Terraform modules and configurations for infrastructure as code
+- **`terraform/`** – Legacy Terraform modules (deprecated, see UniFi API scripts)
+- **`scripts/`** – Apply and plan scripts for UniFi API integration, plus bootstrap utilities
 - **`artifacts/`** – Rendered outputs and generated files (used for local development, not version controlled)
-- **`scripts/`** – Utility scripts for bootstrap, maintenance, and development workflows
 - **`docs/`** – Project documentation, architecture decisions, and operational guides
 - **`.github/workflows/`** – CI/CD workflows including the automated render pipeline
 
@@ -58,17 +61,17 @@ This repository is organized into the following top-level directories:
 
 This repository includes an automated [render pipeline](docs/render-pipeline.md) that:
 - Exports data from the NetBox API
-- Generates Terraform tfvars and UniFi configuration files
+- Generates tfvars configuration files with network definitions
 - Publishes artifacts for review and manual deployment
 - **Attests all artifacts** with SLSA provenance for supply chain security
 
-**Important:** The render pipeline is read-only and does not apply infrastructure changes. See [docs/render-pipeline.md](docs/render-pipeline.md) for details.
+**Important:** The render pipeline is read-only and does not apply infrastructure changes. Apply operations use the UniFi API directly via Python scripts. See [docs/render-pipeline.md](docs/render-pipeline.md) for details.
 
-## PR Approval-Gated Terraform Workflow
+## PR Approval-Gated Apply Workflow
 
-**NEW: Terraform plans now require PR approval before execution.**
+**NEW: Infrastructure plans now require PR approval before execution.**
 
-The Terraform plan workflow (`terraform-plan.yaml`) enforces an approval gate:
+The plan workflow (`terraform-plan.yaml`) enforces an approval gate:
 
 ### How It Works
 
@@ -77,13 +80,13 @@ The Terraform plan workflow (`terraform-plan.yaml`) enforces an approval gate:
    - Or include a link to the workflow run: `https://github.com/.../actions/runs/<run_id>`
 
 2. **Get PR Approval** from a repository maintainer
-   - The PR approval serves as explicit authorization to run Terraform plan
+   - The PR approval serves as explicit authorization to run infrastructure plan
 
 3. **Automatic Plan Execution** after approval
    - Workflow automatically triggers on PR approval event
    - Extracts render run ID from PR description
    - Downloads and verifies attested artifacts from the specified run
-   - Executes Terraform plan for all sites
+   - Executes plan via UniFi API for all sites
    - Records full traceability: PR number, approver, artifact source
 
 ### Key Security Properties
@@ -109,7 +112,9 @@ See [docs/phase4/terraform-plan-approval-workflow.md](docs/phase4/terraform-plan
 - Troubleshooting guide
 - Security guarantees
 
-Also see [docs/phase4/security.md](docs/phase4/security.md) for complete security documentation.
+Also see:
+- [docs/phase4/security.md](docs/phase4/security.md) for complete security documentation
+- [docs/architecture/state-management.md](docs/architecture/state-management.md) for state management architecture
 
 ## Artifact Attestation & Trust Boundary
 
@@ -118,14 +123,14 @@ All artifacts generated by the render pipeline are cryptographically attested us
 - **Integrity protection**: Assurance that artifacts have not been tampered with
 - **Supply chain security**: Protection against unauthorized modifications
 
-**Trust Boundary Contract**: **Terraform must only consume attested artifacts**. This requirement ensures that all infrastructure deployments are traceable to verified sources.
+**Trust Boundary Contract**: **Apply scripts must only consume attested artifacts**. This requirement ensures that all infrastructure deployments are traceable to verified sources.
 
 **Attestation Verification Gate**: A reusable composite action (`.github/actions/verify-attestation`) enforces this contract by verifying attestations before artifacts can be consumed. The gate fails closed in production and provides explicit bypass capability for development/testing.
 
 See documentation:
 - [docs/phase4/attestation-gate.md](docs/phase4/attestation-gate.md) - Attestation verification gate
-- [docs/phase3/terraform-boundary.md](docs/phase3/terraform-boundary.md) - Trust boundary requirements
 - [docs/phase3/attestation.md](docs/phase3/attestation.md) - Attestation implementation
+- [docs/architecture/state-management.md](docs/architecture/state-management.md) - State management architecture
 
 ## Quick Start
 
@@ -177,16 +182,16 @@ The devcontainer provides:
 
 - **Base:** Ubuntu Linux environment
 - **Tools:**
-  - Terraform (latest version)
   - Python 3 (latest version) with pip
   - Docker CLI and Docker Compose (with Docker-in-Docker support)
   - GitHub CLI
   - pre-commit (automatically installed on container creation)
+  - Terraform (legacy, for reference only)
 - **VS Code Extensions:**
   - Python (`ms-python.python`)
-  - Terraform (`hashicorp.terraform`)
   - YAML (`redhat.vscode-yaml`)
   - Markdown All in One (`yzhang.markdown-all-in-one`)
+  - Terraform (`hashicorp.terraform`) - for reference only
 
 ### Network Connectivity
 

@@ -59,7 +59,7 @@ concurrency:
   cancel-in-progress: false
 
 permissions:
-  contents: read
+  contents: read       # Read-only access to repository
   actions: read
   attestations: read   # Required for attestation verification
 
@@ -427,75 +427,88 @@ jobs:
             exit 1
           fi
 
-      - name: Set up Terraform
-        uses: hashicorp/setup-terraform@v3
+      - name: Set up Python
+        uses: actions/setup-python@v5
         with:
-          terraform_version: "~> 1.14"  # Align with local development (v1.14.3)
+          python-version: '3.12'
 
-      - name: Configure Terraform provider (stub mode)
+      - name: Install Python dependencies
         run: |
-          echo "🔧 Configuring Terraform provider..."
-          echo ""
-          echo "⚠️  NOTE: This workflow uses STUB credentials for demonstration."
-          echo "    In a production environment, you would configure real credentials here."
-          echo "    Consider using GitHub Actions secrets or OIDC authentication."
-          echo ""
+          echo "📦 Installing Python dependencies..."
+          pip install requests urllib3
+          echo "✅ Dependencies installed"
 
-          # Stub credentials (same as terraform-plan workflow)
-          echo "TF_VAR_unifi_username=stub" >> $GITHUB_ENV
-          echo "TF_VAR_unifi_password=stub" >> $GITHUB_ENV
-          echo "TF_VAR_unifi_api_url=https://stub.local:8443" >> $GITHUB_ENV
-          echo "TF_VAR_unifi_allow_insecure=true" >> $GITHUB_ENV
-
-          echo "✅ Provider configuration set (stub mode)"
-
-      - name: Terraform Init
-        working-directory: terraform
+      - name: Configure UniFi credentials
         run: |
-          echo "🚀 Initializing Terraform..."
+          echo "🔧 Configuring UniFi API credentials..."
+          echo ""
+          echo "Setting credentials from GitHub secrets..."
+          echo ""
 
-          if ! terraform init -input=false; then
-            echo "❌ Terraform init failed"
-            exit 1
-          fi
+          # Export credentials as environment variables for Python scripts
+          echo "UNIFI_TEST_CONTROLLER_URL=${{ secrets.UNIFI_URL || 'https://localhost:8443' }}" >> $GITHUB_ENV
+          echo "TF_VAR_unifi_username=${{ secrets.UNIFI_USERNAME || 'admin' }}" >> $GITHUB_ENV
+          echo "TF_VAR_unifi_password=${{ secrets.UNIFI_PASSWORD }}" >> $GITHUB_ENV
 
-          echo "✅ Terraform initialized successfully"
+          echo "✅ UniFi credentials configured"
 
-      - name: Terraform Apply
-        id: apply
-        working-directory: terraform
+      - name: Plan changes (UniFi API)
+        id: plan
         run: |
           SITE="${{ needs.validate-inputs.outputs.site }}"
-          PLAN_FILE="../artifacts/plans/tfplan-${SITE}.binary"
+          TFVARS_FILE="artifacts/tfvars/site-${SITE}.tfvars.json"
 
-          echo "🚀 Applying Terraform plan for site: $SITE"
-          echo "   Using plan file: $PLAN_FILE"
-          echo "   Plan checksum: ${{ steps.verify-plan.outputs.binary_checksum }}"
-          echo ""
-          echo "⚠️  NOTE: This apply will FAIL in stub mode because we don't have real credentials."
-          echo "    In production, configure real UniFi controller credentials."
+          echo "🔍 Planning changes for site: $SITE"
+          echo "   Using tfvars: $TFVARS_FILE"
           echo ""
 
-          # Apply the binary plan
-          # Note: -auto-approve is SAFE here because we're applying a specific plan file
-          # The plan has already been reviewed and approved
-          if terraform apply -auto-approve "$PLAN_FILE"; then
-            echo "✅ Terraform apply succeeded"
+          # Run plan script to show what will change
+          if python scripts/plan_unifi.py --tfvars "$TFVARS_FILE" --site "$SITE"; then
+            echo "plan_has_changes=false" >> $GITHUB_OUTPUT
+            echo "✅ No changes detected - infrastructure matches desired state"
+          else
+            EXIT_CODE=$?
+            if [ $EXIT_CODE -eq 2 ]; then
+              echo "plan_has_changes=true" >> $GITHUB_OUTPUT
+              echo "ℹ️  Changes detected - proceeding with apply"
+            else
+              echo "❌ Plan failed with unexpected exit code: $EXIT_CODE"
+              exit 1
+            fi
+          fi
+
+      - name: Apply changes (UniFi API)
+        id: apply
+        run: |
+          SITE="${{ needs.validate-inputs.outputs.site }}"
+          TFVARS_FILE="artifacts/tfvars/site-${SITE}.tfvars.json"
+          STATE_FILE="state/${SITE}-networks.json"
+
+          echo "🚀 Applying network configuration for site: $SITE"
+          echo "   Using tfvars: $TFVARS_FILE"
+          echo "   State file: $STATE_FILE"
+          echo ""
+
+          # Apply configuration via UniFi API
+          if python scripts/apply_via_unifi.py --tfvars "$TFVARS_FILE" --site "$SITE" --state-file "$STATE_FILE"; then
+            echo "✅ Apply completed successfully"
             echo "apply_status=success" >> $GITHUB_OUTPUT
           else
             EXIT_CODE=$?
-            echo "❌ Terraform apply failed with exit code $EXIT_CODE"
-            echo ""
-            echo "In stub mode, this is EXPECTED because we don't have real credentials."
-            echo "In production with real credentials, investigate the failure."
+            echo "❌ Apply failed with exit code $EXIT_CODE"
             echo ""
             echo "apply_status=failed" >> $GITHUB_OUTPUT
-
-            # In stub mode, don't fail the workflow (for demonstration)
-            # In production, remove this and let the workflow fail
-            echo "⚠️  Treating as non-fatal for demonstration purposes"
-            exit 0
+            exit 1
           fi
+
+      - name: Upload state file as artifact
+        if: steps.apply.outputs.apply_status == 'success'
+        uses: actions/upload-artifact@v4
+        with:
+          name: network-state-${{ needs.validate-inputs.outputs.site }}
+          path: state/${{ needs.validate-inputs.outputs.site }}-networks.json
+          retention-days: 90  # Keep state artifacts for audit trail
+          if-no-files-found: warn
 
       - name: Record apply metadata
         if: always()
@@ -643,8 +656,11 @@ jobs:
 
           ## Notes
 
-          ⚠️  **Stub Mode**: This apply used stub credentials for demonstration.
-          In production, configure real UniFi controller credentials using GitHub secrets or OIDC.
+          ℹ️  **Direct API Integration**: This workflow applies configuration via UniFi API instead of Terraform due to provider compatibility issues.
+          Configure UniFi controller credentials using GitHub secrets: UNIFI_URL, UNIFI_USERNAME, UNIFI_PASSWORD.
+
+          **State Management**: State files are uploaded as artifacts (90-day retention) for audit purposes, not committed to git.
+          NetBox remains the authoritative source of desired state; UniFi controller is the authoritative source of actual state.
 
           See [docs/phase5/apply-workflow.md](docs/phase5/apply-workflow.md) for complete documentation.
           EOF
@@ -657,11 +673,11 @@ jobs:
       - name: Overall Summary
         run: |
           cat >> $GITHUB_STEP_SUMMARY << 'EOF'
-          # Terraform Apply Workflow Complete
+          # Network Apply Workflow Complete
 
           ## CI-Only Execution Model
 
-          This workflow demonstrates the complete CI-only Terraform apply pipeline:
+          This workflow demonstrates the complete CI-only network apply pipeline via UniFi API:
 
           ✅ **Input Validation** - Verifies plan run ID, site, and PR number
           ✅ **Plan Workflow Verification** - Ensures referenced plan completed successfully

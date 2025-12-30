@@ -19,6 +19,9 @@ provider "unifi" {
 
   # Allow insecure connections for lab/development environments
   allow_insecure = var.unifi_allow_insecure
+
+  # Use default site
+  site = "default"
 }
 
 # Site Configuration
