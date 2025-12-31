@@ -64,7 +64,7 @@ import argparse
 import json
 import sys
 from pathlib import Path
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Optional
 
 
 def load_json_file(file_path: Path) -> Dict[str, Any]:
@@ -160,6 +160,52 @@ def load_netbox_export(
         raise ValueError("Either input_dir or input_file must be provided")
 
 
+def extract_status_value(status: Any) -> str:
+    """Extract status value from NetBox status field.
+
+    NetBox API returns status as an object with 'label' and 'value' fields.
+    This function extracts just the 'value' string for UniFi compatibility.
+
+    Args:
+        status: Status field from NetBox (can be string or dict)
+
+    Returns:
+        Status string value (e.g., "active", "reserved", "deprecated")
+    """
+    if status is None:
+        return "active"
+    elif isinstance(status, dict):
+        # NetBox API format: {"label": "Reserved", "value": "reserved"}
+        return status.get("value", "active")
+    elif isinstance(status, str):
+        # Already a string (from minimal schema or simplified export)
+        return status
+    else:
+        # Fallback for unexpected types
+        return "active"
+
+
+def extract_vlan_id_from_field(vlan_field: Any) -> Optional[int]:
+    """Extract VLAN ID from a VLAN field (handles int or dict).
+
+    Args:
+        vlan_field: VLAN field value (can be int, dict, or None)
+
+    Returns:
+        VLAN ID as integer, or None if not present
+    """
+    if vlan_field is None:
+        return None
+    elif isinstance(vlan_field, int):
+        return vlan_field
+    elif isinstance(vlan_field, dict):
+        # Try both possible field names
+        vid = vlan_field.get("vid") or vlan_field.get("vlan_id")
+        return int(vid) if vid is not None else None
+    else:
+        return None
+
+
 def extract_site_slug(site_data: Dict[str, Any]) -> str:
     """Extract site slug from site data.
 
@@ -203,8 +249,12 @@ def render_unifi_networks(prefixes: List[Dict[str, Any]]) -> List[Dict[str, Any]
         # Extract CIDR and description
         cidr = prefix.get("prefix", "")
         description = prefix.get("description", "")
-        vlan_id = prefix.get("vlan")
-        status = prefix.get("status", "active")
+        vlan_field = prefix.get("vlan")
+        status_field = prefix.get("status", "active")
+
+        # Use helper functions for consistent extraction
+        status = extract_status_value(status_field)
+        vlan_id = extract_vlan_id_from_field(vlan_field)
 
         # Basic network config
         network = {
@@ -237,9 +287,12 @@ def render_unifi_vlans(vlans: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
     """
     unifi_vlans = []
     for vlan in vlans:
-        vlan_id = vlan.get("vlan_id")
         name = vlan.get("name", "")
-        status = vlan.get("status", "active")
+        status_field = vlan.get("status", "active")
+
+        # Use helper functions for consistent extraction
+        status = extract_status_value(status_field)
+        vlan_id = extract_vlan_id_from_field(vlan)
 
         # Skip if no VLAN ID
         if vlan_id is None:
@@ -423,22 +476,10 @@ Output Files:
 
         print(f"Processing site: {site_name} ({site_slug})")
 
-        # Filter prefixes and VLANs for this site
-        # NetBox export may have 'site' field (from minimal schema)
-        # or nested 'site' object (from API)
-        site_prefixes = []
-        for prefix in all_prefixes:
-            prefix_site = prefix.get("site")
-            # Handle both string (minimal schema) and object (API export)
-            if isinstance(prefix_site, dict):
-                prefix_site_slug = prefix_site.get("slug", prefix_site.get("name"))
-            else:
-                prefix_site_slug = prefix_site
-
-            if prefix_site_slug == site_slug or prefix_site_slug == site_name:
-                site_prefixes.append(prefix)
-
+        # Filter VLANs for this site first
+        # VLANs have direct site association
         site_vlans = []
+        site_vlan_ids = set()  # Track VLAN IDs for this site
         for vlan in all_vlans:
             vlan_site = vlan.get("site")
             # Handle both string (minimal schema) and object (API export)
@@ -449,6 +490,47 @@ Output Files:
 
             if vlan_site_slug == site_slug or vlan_site_slug == site_name:
                 site_vlans.append(vlan)
+                # Track VLAN ID for prefix matching using helper function
+                vlan_id = extract_vlan_id_from_field(vlan)
+                if vlan_id is not None:
+                    site_vlan_ids.add(vlan_id)
+
+        # Filter prefixes for this site using VLAN-based matching
+        # Prefixes may not have direct 'site' field in NetBox API exports
+        # Instead, match by VLAN association AND ensure one prefix per VLAN
+        # (deduplicating by VLAN ID, keeping the last one found)
+        prefix_map = {}  # vlan_id -> prefix (deduplicates)
+
+        for prefix in all_prefixes:
+            prefix_site = prefix.get("site")
+            prefix_vlan = prefix.get("vlan")
+
+            # Method 1: Direct site field (if present)
+            if prefix_site:
+                if isinstance(prefix_site, dict):
+                    prefix_site_slug = prefix_site.get("slug", prefix_site.get("name"))
+                else:
+                    prefix_site_slug = prefix_site
+
+                if prefix_site_slug == site_slug or prefix_site_slug == site_name:
+                    # Extract VLAN ID for deduplication using helper function
+                    vlan_id = extract_vlan_id_from_field(prefix_vlan)
+                    if vlan_id is not None:
+                        prefix_map[vlan_id] = prefix
+                    continue
+
+            # Method 2: Match by VLAN association (primary method for NetBox API)
+            if prefix_vlan is not None:
+                # Extract VLAN ID from prefix using helper function
+                prefix_vlan_id = extract_vlan_id_from_field(prefix_vlan)
+
+                # If this prefix's VLAN belongs to current site, include it
+                # Using dict ensures we keep only ONE prefix per VLAN (last one wins)
+                if prefix_vlan_id is not None and prefix_vlan_id in site_vlan_ids:
+                    prefix_map[prefix_vlan_id] = prefix
+
+        # Convert map back to list
+        site_prefixes = list(prefix_map.values())
 
         print(f"  - {len(site_prefixes)} network(s) from prefixes")
         print(f"  - {len(site_vlans)} VLAN(s)")
