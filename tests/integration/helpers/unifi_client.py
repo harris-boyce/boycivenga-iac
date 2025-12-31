@@ -26,16 +26,35 @@ class UniFiClient:
         """Initialize UniFi client with credentials.
 
         Args:
-            url: UniFi controller URL (defaults to UNIFI_TEST_CONTROLLER_URL env var)
-            username: Admin username (defaults to TF_VAR_unifi_username env var)
-            password: Admin password (defaults to TF_VAR_unifi_password env var)
+            url: UniFi controller URL
+                (defaults to UNIFI_CONTROLLER_URL or UNIFI_TEST_CONTROLLER_URL)
+            username: Admin username
+                (defaults to UNIFI_USERNAME or TF_VAR_unifi_username)
+            password: Admin password
+                (defaults to UNIFI_PASSWORD or TF_VAR_unifi_password)
+
+        Note:
+            Prefers UNIFI_* environment variables,
+            falls back to TF_VAR_* for backward compatibility.
         """
-        self.url = url or os.getenv(
-            "UNIFI_TEST_CONTROLLER_URL", "https://localhost:8443"
+        # Prefer UNIFI_* variables, fall back to TF_VAR_* for backward compatibility
+        self.url = (
+            url
+            or os.getenv("UNIFI_CONTROLLER_URL")
+            or os.getenv("UNIFI_TEST_CONTROLLER_URL")
+            or "https://localhost:8443"
         )
-        self.username = username or os.getenv("TF_VAR_unifi_username", "admin")
-        self.password = password or os.getenv(
-            "TF_VAR_unifi_password", "unifi-integration-test-password"
+        self.username = (
+            username
+            or os.getenv("UNIFI_USERNAME")
+            or os.getenv("TF_VAR_unifi_username")
+            or "admin"
+        )
+        self.password = (
+            password
+            or os.getenv("UNIFI_PASSWORD")
+            or os.getenv("TF_VAR_unifi_password")
+            or "unifi-integration-test-password"
         )
 
         self.session = requests.Session()
