@@ -1,4 +1,4 @@
-name: Terraform Apply (CI-Only)
+name: UniFi Apply (CI-Only)
 
 # ============================================================================
 # SECURITY & AUTHORITY BOUNDARIES
@@ -12,7 +12,7 @@ name: Terraform Apply (CI-Only)
 #    - No alternative execution paths are permitted
 #
 # 2. POLICY GATE ENFORCEMENT:
-#    - Apply ONLY runs after successful policy evaluation in terraform-plan
+#    - Apply ONLY runs after successful policy evaluation in unifi-plan
 #    - Requires explicit workflow dispatch with plan artifacts reference
 #    - Policy approval is re-verified before apply execution
 #
@@ -41,7 +41,7 @@ on:
   workflow_dispatch:
     inputs:
       plan_run_id:
-        description: 'Terraform plan workflow run ID (must have passed policy evaluation)'
+        description: 'UniFi plan workflow run ID (must have passed policy evaluation)'
         required: true
         type: string
       site:
@@ -177,10 +177,14 @@ jobs:
           echo "📋 Checking approval requirement for plan..."
 
           # Download the approval metadata file
+          # Try new naming first, fall back to legacy naming
           mkdir -p temp-approval
-          if ! gh run download "$PLAN_RUN_ID" --name "terraform-plan-${SITE}" --dir temp-approval; then
-            echo "❌ Failed to download plan artifacts"
-            exit 1
+          if ! gh run download "$PLAN_RUN_ID" --name "unifi-plan-${SITE}" --dir temp-approval 2>/dev/null; then
+            echo "⚠️  Trying legacy artifact name..."
+            if ! gh run download "$PLAN_RUN_ID" --name "terraform-plan-${SITE}" --dir temp-approval; then
+              echo "❌ Failed to download plan artifacts (tried both names)"
+              exit 1
+            fi
           fi
 
           # Check if approval metadata exists
@@ -249,15 +253,23 @@ jobs:
             exit 1
           fi
 
-          # Download terraform-plan artifact for the specific site
-          echo "Downloading terraform-plan-${SITE}..."
-          if ! gh run download "$PLAN_RUN_ID" --name "terraform-plan-${SITE}" --dir artifacts/plans; then
-            echo "❌ Failed to download terraform-plan-${SITE} artifact"
-            echo "   This may indicate:"
-            echo "   - The site name is incorrect"
-            echo "   - The plan for this site failed"
-            echo "   - The artifacts expired"
-            exit 1
+          # Download plan artifact for the specific site
+          # Try new naming first, fall back to legacy naming
+          echo "Downloading unifi-plan-${SITE}..."
+          if ! gh run download "$PLAN_RUN_ID" --name "unifi-plan-${SITE}" --dir artifacts/plans 2>/dev/null; then
+            echo "⚠️  New artifact name not found, trying legacy name..."
+            echo "Downloading terraform-plan-${SITE}..."
+            if ! gh run download "$PLAN_RUN_ID" --name "terraform-plan-${SITE}" --dir artifacts/plans; then
+              echo "❌ Failed to download plan artifact (tried both unifi-plan-${SITE} and terraform-plan-${SITE})"
+              echo "   This may indicate:"
+              echo "   - The site name is incorrect"
+              echo "   - The plan for this site failed"
+              echo "   - The artifacts expired"
+              exit 1
+            fi
+            echo "✅ Downloaded using legacy artifact name (terraform-plan-${SITE})"
+          else
+            echo "✅ Downloaded using new artifact name (unifi-plan-${SITE})"
           fi
 
           echo "✅ Artifacts downloaded successfully"

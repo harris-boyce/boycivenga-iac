@@ -40,10 +40,10 @@ for section in "## Overview" "## Output Artifacts" "## Deterministic Ordering" "
     fi
 done
 
-# Test 3: Validate terraform-plan.yaml generates JSON output
+# Test 3: Validate unifi-plan.yaml generates JSON output
 echo ""
 echo "Test 3: Checking workflow generates JSON output..."
-if grep -q "terraform show -json" .github/workflows/terraform-plan.yaml; then
+if grep -q "terraform show -json" .github/workflows/unifi-plan.yaml; then
     pass "Workflow generates JSON plan output"
 else
     fail "Workflow missing JSON plan generation"
@@ -52,13 +52,13 @@ fi
 # Test 4: Check workflow uploads plan artifacts
 echo ""
 echo "Test 4: Checking workflow uploads plan artifacts..."
-if grep -A10 "Upload Terraform Plans" .github/workflows/terraform-plan.yaml | grep -q "\.json"; then
+if grep -A10 "Upload UniFi Plans" .github/workflows/unifi-plan.yaml | grep -q "\.json"; then
     pass "Workflow uploads JSON plan artifacts"
 else
     fail "Workflow missing JSON plan upload"
 fi
 
-if grep -A10 "Upload Terraform Plans" .github/workflows/terraform-plan.yaml | grep -q "\.binary"; then
+if grep -A10 "Upload UniFi Plans" .github/workflows/unifi-plan.yaml | grep -q "\.binary"; then
     pass "Workflow uploads binary plan artifacts"
 else
     fail "Workflow missing binary plan upload"
@@ -148,7 +148,7 @@ fi
 # Test 7: Verify workflow uses diff generator
 echo ""
 echo "Test 7: Checking workflow uses diff generator..."
-if grep -q "generate-plan-diff.py" .github/workflows/terraform-plan.yaml; then
+if grep -q "generate-plan-diff.py" .github/workflows/unifi-plan.yaml; then
     pass "Workflow uses diff generator script"
 else
     fail "Workflow missing diff generator integration"

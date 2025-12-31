@@ -1,4 +1,4 @@
-name: Terraform Plan
+name: UniFi Plan
 
 # ============================================================================
 # SECURITY & AUTHORITY BOUNDARIES
@@ -13,13 +13,14 @@ name: Terraform Plan
 #    - Provides full traceability: PR number → Approver → Artifact source
 #
 # 2. EXECUTION BOUNDARY:
-#    - This workflow is the ONLY permitted way to execute Terraform plan
-#    - Manual/local execution of Terraform is PROHIBITED
+#    - This workflow is the ONLY permitted way to execute UniFi plan generation
+#    - Terraform is used for schema validation only (stub mode, no controller access)
+#    - Manual/local execution is PROHIBITED
 #    - No alternative CI/CD systems are permitted
 #
 # 3. AUTHORITY BOUNDARY:
 #    - NetBox is the authoritative source of infrastructure intent
-#    - Terraform is an implementation tool, NOT an authority
+#    - Terraform validates schemas; UniFi API applies configuration
 #    - All infrastructure definitions MUST come from NetBox via render pipeline
 #
 # 4. SECURITY BOUNDARY:
@@ -52,7 +53,7 @@ on:
 
 # Prevent concurrent plans
 concurrency:
-  group: terraform-plan-${{ github.event.inputs.site || 'all' }}
+  group: unifi-plan-${{ github.event.inputs.site || 'all' }}
   cancel-in-progress: false
 
 permissions:
@@ -61,7 +62,7 @@ permissions:
   attestations: read   # Required for attestation verification
 
 jobs:
-  terraform-plan:
+  unifi-plan:
     runs-on: ubuntu-latest
     # APPROVAL GATE: Only run on approved PRs or manual dispatch
     # - For PR reviews: Only process if review state is 'approved'
@@ -513,7 +514,22 @@ jobs:
           echo "✅ Approval metadata recorded"
           cat "tfplan-${SITE}-approval.json"
 
-      - name: Upload Terraform Plans
+      - name: Upload UniFi Plans
+        uses: actions/upload-artifact@v4
+        if: steps.check-site.outputs.skip != 'true' && always()
+        with:
+          name: unifi-plan-${{ matrix.site }}
+          path: |
+            terraform/tfplan-${{ matrix.site }}.binary
+            terraform/tfplan-${{ matrix.site }}.json
+            terraform/tfplan-${{ matrix.site }}-diff.md
+            terraform/tfplan-${{ matrix.site }}-approval.json
+            terraform/tfplan-${{ matrix.site }}-decision.json
+            terraform/tfplan-${{ matrix.site }}-explanation.txt
+          retention-days: 30
+
+      # BACKWARD COMPATIBILITY: Upload with legacy name during transition (30 days)
+      - name: Upload Plans (Legacy Name)
         uses: actions/upload-artifact@v4
         if: steps.check-site.outputs.skip != 'true' && always()
         with:
@@ -534,7 +550,7 @@ jobs:
           PR_NUM="${{ steps.determine-run.outputs.pr_number }}"
 
           cat >> $GITHUB_STEP_SUMMARY << 'EOF'
-          ## Terraform Plan: ${{ matrix.site }}
+          ## UniFi Plan: ${{ matrix.site }}
 
           **Status**: ${{ steps.plan.outputs.plan_status || 'unknown' }}
           **Exit Code**: ${{ steps.plan.outputs.plan_exit_code || 'N/A' }}
@@ -623,17 +639,17 @@ jobs:
 
   plan-summary:
     runs-on: ubuntu-latest
-    needs: terraform-plan
+    needs: unifi-plan
     if: always()
     steps:
       - name: Overall Summary
         run: |
           cat >> $GITHUB_STEP_SUMMARY << 'EOF'
-          # Terraform Plan Workflow Complete
+          # UniFi Plan Workflow Complete
 
           ## Approval-Gated Execution
 
-          This workflow enforces PR approval before Terraform plan execution:
+          This workflow enforces PR approval before UniFi plan execution:
           - ✅ **Trigger**: Pull request approval event only
           - ✅ **Artifact Reference**: Explicit render run ID from PR description
           - ✅ **Traceability**: PR number, approver, and timestamps recorded
@@ -641,12 +657,12 @@ jobs:
 
           ## What This Workflow Does
 
-          This workflow demonstrates the complete Terraform plan pipeline:
+          This workflow demonstrates the complete UniFi plan pipeline:
 
           1. ✅ **Extract PR Metadata** - Captures PR number, approver, and render run ID
           2. ✅ **Download Attested Artifacts** - Retrieves tfvars from specified render run
           3. ✅ **Verify Attestations** - Ensures artifacts have valid SLSA provenance
-          4. ✅ **Provider Schema Validation** - Validates against UniFi provider schema
+          4. ✅ **Schema Validation** - Validates against UniFi provider schema (Terraform stub mode)
           5. ✅ **Generate Plan** - Creates both binary and JSON plan outputs
           6. ✅ **Policy Evaluation** - OPA evaluates plan against organizational policies
           7. ✅ **Record Traceability** - Links plan to PR approval and artifact source
@@ -677,12 +693,19 @@ jobs:
           - **Mode**: Stub credentials for schema validation
           - **Decoupling**: Provider config separated from artifact generation
 
+          ## Hybrid Architecture
+
+          This workflow uses a hybrid approach:
+          - **Terraform**: Schema validation only (stub credentials, no controller access)
+          - **UniFi API**: Actual infrastructure application (via Python scripts)
+          - **Reason**: Terraform provider had CI/CD compatibility issues
+
           ## Next Steps
 
-          To use these plans for actual deployment:
+          To apply these plans:
           1. Review the plan JSON outputs
-          2. Configure real UniFi controller credentials
-          3. Run terraform apply with the binary plan file
+          2. Manually trigger the UniFi Apply workflow
+          3. Configuration applied via UniFi API (not Terraform)
 
           See [docs/phase3/terraform-boundary.md](docs/phase3/terraform-boundary.md) for complete details.
           EOF

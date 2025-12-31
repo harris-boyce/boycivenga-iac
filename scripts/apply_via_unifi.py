@@ -356,10 +356,16 @@ def main():
 
     # Production safety check: Insecure TLS must never be enabled in CI/CD
     if os.getenv("GITHUB_ACTIONS") == "true":
-        allow_insecure = os.getenv("TF_VAR_unifi_allow_insecure", "").lower()
+        # Check both UNIFI_ALLOW_INSECURE and TF_VAR_unifi_allow_insecure
+        # for backward compatibility
+        allow_insecure = (
+            os.getenv("UNIFI_ALLOW_INSECURE")
+            or os.getenv("TF_VAR_unifi_allow_insecure")
+            or ""
+        ).lower()
         if allow_insecure == "true":
             print("❌ SECURITY ERROR: Insecure TLS is not allowed in GitHub Actions")
-            print("   Set TF_VAR_unifi_allow_insecure=false in production")
+            print("   Set UNIFI_ALLOW_INSECURE=false in production")
             print("   Insecure TLS is only permitted for local development")
             return 1
 

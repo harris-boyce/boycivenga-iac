@@ -1,7 +1,7 @@
 # boycivenga-iac
 Infrastructure-as-Code repository for managing home networking, lab, and smart home automations via UniFi API.
 
-> **Note**: This repository originally used Terraform but has migrated to direct UniFi API integration due to Terraform provider compatibility issues. All security boundaries (attestation, policy, approval) remain intact.
+> **Hybrid Architecture**: This repository uses a hybrid approach where Terraform provides schema validation (stub mode), and the UniFi API handles actual infrastructure application. This architecture was adopted due to Terraform provider compatibility issues in CI/CD. All security boundaries (attestation, policy, approval) remain intact.
 
 ## ⚠️ Security & Authority Boundaries
 
@@ -71,7 +71,7 @@ This repository includes an automated [render pipeline](docs/render-pipeline.md)
 
 **NEW: Infrastructure plans now require PR approval before execution.**
 
-The plan workflow (`terraform-plan.yaml`) enforces an approval gate:
+The plan workflow (`unifi-plan.yaml`) enforces an approval gate:
 
 ### How It Works
 
