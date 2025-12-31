@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Tool: trigger_apply - Trigger terraform-apply workflow."""
+"""Tool: trigger_apply - Trigger unifi-apply workflow."""
 
 from typing import Any, Dict
 
@@ -9,21 +9,21 @@ from ..github_client import GitHubClient, GitHubClientError
 def trigger_apply(
     plan_run_id: str, site: str, pr_number: str, github_client: GitHubClient
 ) -> Dict[str, Any]:
-    """Trigger the terraform-apply workflow.
+    """Trigger the unifi-apply workflow.
 
     This workflow:
     - Validates inputs (plan run ID, site, PR number)
     - Downloads plan artifacts from specified plan run
     - Re-verifies SLSA attestations for artifacts
     - Re-evaluates plan against OPA policies
-    - Applies the approved Terraform plan
+    - Applies configuration via UniFi API (not Terraform)
     - Records complete audit trail
 
     IMPORTANT: This is a destructive operation that modifies infrastructure.
     The workflow enforces strict validation and re-verification before apply.
 
     Args:
-        plan_run_id: Terraform plan workflow run ID (must have passed policy)
+        plan_run_id: UniFi plan workflow run ID (must have passed policy)
         site: Site to apply (required, must match plan artifact)
         pr_number: PR number for traceability (required)
         github_client: Initialized GitHubClient instance
@@ -43,7 +43,7 @@ def trigger_apply(
                     "https://github.com/harris-boyce/boycivenga-iac"
                     "/actions/runs/20562700000"
                 ),
-                "workflow": "terraform-apply.yaml",
+                "workflow": "unifi-apply.yaml",
                 "inputs": {
                     "plan_run_id": "20562600000",
                     "site": "pennington",
@@ -98,7 +98,7 @@ def trigger_apply(
 
         # Trigger workflow
         run_id = github_client.trigger_workflow(
-            workflow_file="terraform-apply.yaml", ref="main", inputs=inputs
+            workflow_file="unifi-apply.yaml", ref="main", inputs=inputs
         )
 
         # Construct URL

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Tool: trigger_plan - Trigger terraform-plan workflow."""
+"""Tool: trigger_plan - Trigger unifi-plan workflow."""
 
 from typing import Any, Dict, Optional
 
@@ -12,12 +12,12 @@ def trigger_plan(
     site: Optional[str] = None,
     pr_number: Optional[str] = None,
 ) -> Dict[str, Any]:
-    """Trigger the terraform-plan workflow.
+    """Trigger the unifi-plan workflow.
 
     This workflow:
     - Downloads attested artifacts from specified render run
     - Verifies SLSA provenance attestations
-    - Runs Terraform plan for site(s)
+    - Runs Terraform schema validation (stub mode) and UniFi API plan
     - Evaluates plans against OPA policies
     - Uploads plan artifacts for apply workflow
 
@@ -87,7 +87,7 @@ def trigger_plan(
 
         # Trigger workflow
         run_id = github_client.trigger_workflow(
-            workflow_file="terraform-plan.yaml", ref="main", inputs=inputs
+            workflow_file="unifi-plan.yaml", ref="main", inputs=inputs
         )
 
         # Construct URL
@@ -98,7 +98,7 @@ def trigger_plan(
             "data": {
                 "run_id": run_id,
                 "url": url,
-                "workflow": "terraform-plan.yaml",
+                "workflow": "unifi-plan.yaml",
                 "inputs": inputs,
             },
         }
