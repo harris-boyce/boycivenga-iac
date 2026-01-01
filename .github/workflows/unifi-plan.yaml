@@ -82,6 +82,9 @@ jobs:
       - docker-runner
       - ${{ matrix.site }}
 
+    environment:
+      name: production-${{ matrix.site }}
+
     steps:
       - name: Check if site should be processed
         id: check-site
