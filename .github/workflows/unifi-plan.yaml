@@ -355,6 +355,11 @@ jobs:
 
           # Consider it a success if we got this far with schema validation
           exit 0
+        env:
+          TF_VAR_unifi_username: ${{ secrets.UNIFI_USERNAME }}
+          TF_VAR_unifi_password: ${{ secrets.UNIFI_PASSWORD }}
+          TF_VAR_unifi_api_url: ${{ secrets.UNIFI_URL }}
+          TF_VAR_unifi_allow_insecure: ${{ secrets.UNIFI_ALLOW_INSECURE || 'false' }}
 
       - name: Terraform Show (JSON)
         if: steps.check-site.outputs.skip != 'true' && steps.plan.outputs.plan_status != 'failed'
