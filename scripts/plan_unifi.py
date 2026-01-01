@@ -299,26 +299,42 @@ def main():
             repo_root = Path(__file__).parent.parent
             state_file = repo_root / "state" / f"{args.site}-networks.json"
 
-        # Production safety check: Insecure TLS must never be
-        # enabled in CI/CD
+        # Production safety check: Insecure TLS handling
         if os.getenv("GITHUB_ACTIONS") == "true":
-            # Check both UNIFI_ALLOW_INSECURE and
-            # TF_VAR_unifi_allow_insecure
-            # for backward compatibility
-            allow_insecure = (
-                os.getenv("UNIFI_ALLOW_INSECURE")
-                or os.getenv("TF_VAR_unifi_allow_insecure")
-                or ""
-            ).lower()
-            if allow_insecure == "true":
+            # Prefer UNIFI_ALLOW_INSECURE (explicitly set by workflow)
+            # over TF_VAR_unifi_allow_insecure (Terraform stub mode)
+            unifi_allow_insecure = os.getenv("UNIFI_ALLOW_INSECURE", "").lower()
+            tf_var_allow_insecure = os.getenv("TF_VAR_unifi_allow_insecure", "").lower()
+
+            # If UNIFI_ALLOW_INSECURE is explicitly set, use it
+            if unifi_allow_insecure:
+                if unifi_allow_insecure == "true":
+                    print(
+                        "⚠️  WARNING: Insecure TLS enabled "
+                        "(self-signed certs allowed)",
+                        flush=True,
+                    )
+                    print(
+                        "   This should ONLY be used for testing "
+                        "with local controllers",
+                        flush=True,
+                    )
+                # Allow workflow to proceed with explicit setting
+            elif tf_var_allow_insecure == "true":
+                # Block if only TF_VAR is set (from Terraform stub mode)
                 print(
-                    "❌ SECURITY ERROR: Insecure TLS is not allowed "
-                    "in GitHub Actions",
+                    "❌ SECURITY ERROR: Detected insecure TLS from "
+                    "Terraform stub mode",
                     flush=True,
                 )
-                print("   Set UNIFI_ALLOW_INSECURE=false in production", flush=True)
                 print(
-                    "   Insecure TLS is only permitted for local " "development",
+                    "   Set UNIFI_ALLOW_INSECURE explicitly in workflow "
+                    "to allow insecure TLS",
+                    flush=True,
+                )
+                print(
+                    "   Or set UNIFI_ALLOW_INSECURE=false to enforce "
+                    "secure connections",
                     flush=True,
                 )
                 return 1

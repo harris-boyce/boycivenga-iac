@@ -50,6 +50,11 @@ on:
         description: 'Site to plan (leave empty for all sites)'
         required: false
         type: string
+      allow_insecure_tls:
+        description: 'Allow insecure TLS (self-signed certs) - TESTING ONLY'
+        required: false
+        type: boolean
+        default: false
 
 # Prevent concurrent plans
 concurrency:
@@ -278,29 +283,37 @@ jobs:
           pip install requests urllib3
           echo "✅ Dependencies installed"
 
-      # - name: Configure UniFi credentials
-      #   id: configure-unifi
-      #   if: steps.check-site.outputs.skip != 'true'
-      #   run: |
-      #     echo "🔧 Configuring UniFi API credentials..."
+      - name: Configure UniFi credentials
+        id: configure-unifi
+        if: steps.check-site.outputs.skip != 'true'
+        run: |
+          echo "🔧 Configuring UniFi API credentials..."
 
-      #     # Export credentials from GitHub Secrets
-      #     # Use UNIFI_* prefix to distinguish from Terraform stub credentials
-      #     echo "UNIFI_CONTROLLER_URL=${{ secrets.UNIFI_URL || 'https://unifi.example.com:8443' }}" >> $GITHUB_ENV
-      #     echo "UNIFI_USERNAME=${{ secrets.UNIFI_USERNAME || '' }}" >> $GITHUB_ENV
-      #     echo "UNIFI_PASSWORD=${{ secrets.UNIFI_PASSWORD || '' }}" >> $GITHUB_ENV
-      #     echo "UNIFI_ALLOW_INSECURE=false" >> $GITHUB_ENV
+          # Export credentials from GitHub Secrets
+          # Use UNIFI_* prefix to distinguish from Terraform stub credentials
+          echo "UNIFI_CONTROLLER_URL=${{ secrets.UNIFI_URL || 'https://unifi.example.com:8443' }}" >> $GITHUB_ENV
+          echo "UNIFI_USERNAME=${{ secrets.UNIFI_USERNAME || '' }}" >> $GITHUB_ENV
+          echo "UNIFI_PASSWORD=${{ secrets.UNIFI_PASSWORD || '' }}" >> $GITHUB_ENV
 
-      #     # Validate credentials are set
-      #     if [ -z "${{ secrets.UNIFI_USERNAME }}" ] || [ -z "${{ secrets.UNIFI_PASSWORD }}" ]; then
-      #       echo "⚠️  WARNING: UniFi credentials not configured in GitHub Secrets"
-      #       echo "   Python plan will be skipped"
-      #       echo "   Add UNIFI_URL, UNIFI_USERNAME, UNIFI_PASSWORD secrets to enable"
-      #       echo "skip_python_plan=true" >> $GITHUB_OUTPUT
-      #     else
-      #       echo "✅ UniFi credentials configured"
-      #       echo "skip_python_plan=false" >> $GITHUB_OUTPUT
-      #     fi
+          # Handle TLS verification based on workflow input
+          if [ "${{ github.event.inputs.allow_insecure_tls }}" = "true" ]; then
+            echo "⚠️  WARNING: Insecure TLS enabled (self-signed certs allowed)"
+            echo "   This should ONLY be used for testing with local controllers"
+            echo "UNIFI_ALLOW_INSECURE=true" >> $GITHUB_ENV
+          else
+            echo "UNIFI_ALLOW_INSECURE=false" >> $GITHUB_ENV
+          fi
+
+          # Validate credentials are set
+          if [ -z "${{ secrets.UNIFI_USERNAME }}" ] || [ -z "${{ secrets.UNIFI_PASSWORD }}" ]; then
+            echo "⚠️  WARNING: UniFi credentials not configured in GitHub Secrets"
+            echo "   Python plan will be skipped"
+            echo "   Add UNIFI_URL, UNIFI_USERNAME, UNIFI_PASSWORD secrets to enable"
+            echo "skip_python_plan=true" >> $GITHUB_OUTPUT
+          else
+            echo "✅ UniFi credentials configured"
+            echo "skip_python_plan=false" >> $GITHUB_OUTPUT
+          fi
 
       - name: Terraform Validate
         if: steps.check-site.outputs.skip != 'true'
