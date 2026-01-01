@@ -259,6 +259,10 @@ def print_diff_summary(diff: Dict[str, Any]) -> None:
 
 def main():
     """Main entry point for plan script."""
+    # Force unbuffered output for GitHub Actions
+    sys.stdout.reconfigure(line_buffering=True)
+    sys.stderr.reconfigure(line_buffering=True)
+
     parser = argparse.ArgumentParser(
         description="Preview network configuration changes (like terraform plan)"
     )
@@ -287,83 +291,131 @@ def main():
 
     args = parser.parse_args()
 
-    # Determine state file path
-    if args.state_file:
-        state_file = args.state_file
-    else:
-        repo_root = Path(__file__).parent.parent
-        state_file = repo_root / "state" / f"{args.site}-networks.json"
-
-    # Production safety check: Insecure TLS must never be enabled in CI/CD
-    if os.getenv("GITHUB_ACTIONS") == "true":
-        # Check both UNIFI_ALLOW_INSECURE and TF_VAR_unifi_allow_insecure
-        # for backward compatibility
-        allow_insecure = (
-            os.getenv("UNIFI_ALLOW_INSECURE")
-            or os.getenv("TF_VAR_unifi_allow_insecure")
-            or ""
-        ).lower()
-        if allow_insecure == "true":
-            print("❌ SECURITY ERROR: Insecure TLS is not allowed in GitHub Actions")
-            print("   Set UNIFI_ALLOW_INSECURE=false in production")
-            print("   Insecure TLS is only permitted for local development")
-            return 1
-
-    # Load desired state from tfvars
-    print(f"Loading desired state from: {args.tfvars}")
-    tfvars = load_tfvars(args.tfvars)
-    desired = build_desired_state(tfvars)
-    print(f"  Found {len(desired)} desired network(s)")
-
-    # Load recorded state from state file (optional - for drift detection)
-    print(f"\nLoading recorded state from: {state_file}")
-    state_data = load_state_file(state_file)
-    if state_data:
-        recorded = state_data.get("networks", [])
-        print(f"  Found {len(recorded)} recorded network(s)")
-        print(f"  Last applied: {state_data.get('applied_at')}")
-        print(f"  Applied by: {state_data.get('applied_by')}")
-    else:
-        recorded = []
-        print(
-            "  No state file found - comparing desired (NetBox) vs actual (UniFi) only"
-        )
-
-    # Load actual state from UniFi controller
-    print(f"\nQuerying UniFi controller for site: {args.site}")
-    client = UniFiClient()
-    client.login()
     try:
-        all_networks = client.get_networks(args.site)
-        # Filter to only test networks or networks we manage
-        actual = [
-            net
-            for net in all_networks
-            if net.get("name", "").startswith("test-")
-            or any(d["name"] == net.get("name") for d in desired)
-        ]
-        print(f"  Found {len(actual)} managed network(s)")
-    finally:
-        client.logout()
+        # Determine state file path
+        if args.state_file:
+            state_file = args.state_file
+        else:
+            repo_root = Path(__file__).parent.parent
+            state_file = repo_root / "state" / f"{args.site}-networks.json"
 
-    # Compute diff
-    print("\nComputing diff...")
-    diff = compute_diff(desired, recorded, actual)
+        # Production safety check: Insecure TLS must never be
+        # enabled in CI/CD
+        if os.getenv("GITHUB_ACTIONS") == "true":
+            # Check both UNIFI_ALLOW_INSECURE and
+            # TF_VAR_unifi_allow_insecure
+            # for backward compatibility
+            allow_insecure = (
+                os.getenv("UNIFI_ALLOW_INSECURE")
+                or os.getenv("TF_VAR_unifi_allow_insecure")
+                or ""
+            ).lower()
+            if allow_insecure == "true":
+                print(
+                    "❌ SECURITY ERROR: Insecure TLS is not allowed "
+                    "in GitHub Actions",
+                    flush=True,
+                )
+                print("   Set UNIFI_ALLOW_INSECURE=false in production", flush=True)
+                print(
+                    "   Insecure TLS is only permitted for local " "development",
+                    flush=True,
+                )
+                return 1
 
-    # Optionally suppress drift reporting
-    if args.ignore_drift:
-        diff["drift"] = []
+        # Load desired state from tfvars
+        print(f"Loading desired state from: {args.tfvars}", flush=True)
+        tfvars = load_tfvars(args.tfvars)
+        desired = build_desired_state(tfvars)
+        print(f"  Found {len(desired)} desired network(s)", flush=True)
 
-    # Print summary
-    print_diff_summary(diff)
+        # Load recorded state from state file (optional - for drift detection)
+        print(f"\nLoading recorded state from: {state_file}", flush=True)
+        state_data = load_state_file(state_file)
+        if state_data:
+            recorded = state_data.get("networks", [])
+            print(f"  Found {len(recorded)} recorded network(s)", flush=True)
+            print(f"  Last applied: {state_data.get('applied_at')}", flush=True)
+            print(f"  Applied by: {state_data.get('applied_by')}", flush=True)
+        else:
+            recorded = []
+            print(
+                "  No state file found - comparing desired (NetBox) vs "
+                "actual (UniFi) only",
+                flush=True,
+            )
 
-    # Exit with appropriate code
-    # 0 = no changes needed
-    # 2 = changes detected (Terraform convention)
-    if diff["is_clean"]:
-        return 0
-    else:
-        return 2
+        # Load actual state from UniFi controller
+        print(f"\nQuerying UniFi controller for site: {args.site}", flush=True)
+        controller_url = (
+            os.getenv("UNIFI_CONTROLLER_URL")
+            or os.getenv("UNIFI_TEST_CONTROLLER_URL")
+            or "default"
+        )
+        print(f"  Controller URL: {controller_url}", flush=True)
+        username = (
+            os.getenv("UNIFI_USERNAME")
+            or os.getenv("TF_VAR_unifi_username")
+            or "default"
+        )
+        print(f"  Username: {username}", flush=True)
+
+        client = UniFiClient()
+        print("  Attempting login...", flush=True)
+        client.login()
+        print("  Login successful!", flush=True)
+
+        try:
+            print(f"  Fetching networks for site: {args.site}...", flush=True)
+            all_networks = client.get_networks(args.site)
+            print(
+                f"  Retrieved {len(all_networks)} total network(s)",
+                flush=True,
+            )
+
+            # Filter to only test networks or networks we manage
+            actual = [
+                net
+                for net in all_networks
+                if net.get("name", "").startswith("test-")
+                or any(d["name"] == net.get("name") for d in desired)
+            ]
+            print(f"  Found {len(actual)} managed network(s)", flush=True)
+        finally:
+            print("  Logging out...", flush=True)
+            client.logout()
+            print("  Logout successful!", flush=True)
+
+        # Compute diff
+        print("\nComputing diff...", flush=True)
+        diff = compute_diff(desired, recorded, actual)
+        print("  Diff computation complete", flush=True)
+
+        # Optionally suppress drift reporting
+        if args.ignore_drift:
+            diff["drift"] = []
+
+        # Print summary
+        print_diff_summary(diff)
+
+        # Exit with appropriate code
+        # 0 = no changes needed
+        # 2 = changes detected (Terraform convention)
+        if diff["is_clean"]:
+            print("\n✅ Plan complete: No changes needed", flush=True)
+            return 0
+        else:
+            print("\n📝 Plan complete: Changes detected", flush=True)
+            return 2
+
+    except Exception as e:
+        print("\n❌ ERROR: Plan failed with exception:", flush=True)
+        print(f"   {type(e).__name__}: {str(e)}", flush=True)
+        import traceback
+
+        print("\nFull traceback:", flush=True)
+        traceback.print_exc()
+        return 1
 
 
 if __name__ == "__main__":

@@ -460,6 +460,8 @@ jobs:
           steps.check-site.outputs.skip != 'true' &&
           steps.configure-unifi.outputs.skip_python_plan != 'true'
         continue-on-error: true
+        env:
+          PYTHONUNBUFFERED: 1
         run: |
           SITE="${{ matrix.site }}"
           TFVARS_FILE="artifacts/tfvars/site-${SITE}.tfvars.json"
@@ -474,8 +476,10 @@ jobs:
           # Create terraform directory if it doesn't exist
           mkdir -p terraform
 
-          # Run Python plan and capture output
-          if python3 scripts/plan_unifi.py \
+          # Run Python plan with unbuffered output and capture to file
+          # Use python3 -u flag for unbuffered output
+          # stdbuf forces line buffering for real-time logging
+          if stdbuf -oL -eL python3 -u scripts/plan_unifi.py \
               --tfvars "$TFVARS_FILE" \
               --site "$SITE" \
               --state-file "$STATE_FILE" \
