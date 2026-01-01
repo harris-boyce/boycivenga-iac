@@ -63,7 +63,6 @@ permissions:
 
 jobs:
   unifi-plan:
-    runs-on: ubuntu-latest
     # APPROVAL GATE: Only run on approved PRs or manual dispatch
     # - For PR reviews: Only process if review state is 'approved'
     # - For manual dispatch: Always allow (for testing/emergency)
@@ -76,6 +75,12 @@ jobs:
         # Define sites - this could be dynamically generated in the future
         site: [pennington, count-fleet-court]
       fail-fast: false
+
+    # Use self-hosted docker-runner with site-specific label for UniFi connectivity
+    runs-on:
+      - self-hosted
+      - docker-runner
+      - ${{ matrix.site }}
 
     steps:
       - name: Check if site should be processed
@@ -257,6 +262,43 @@ jobs:
           terraform version
           terraform providers
 
+      - name: Set up Python
+        if: steps.check-site.outputs.skip != 'true'
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install Python dependencies
+        if: steps.check-site.outputs.skip != 'true'
+        run: |
+          echo "📦 Installing Python dependencies for UniFi plan..."
+          pip install requests urllib3
+          echo "✅ Dependencies installed"
+
+      - name: Configure UniFi credentials
+        id: configure-unifi
+        if: steps.check-site.outputs.skip != 'true'
+        run: |
+          echo "🔧 Configuring UniFi API credentials..."
+
+          # Export credentials from GitHub Secrets
+          # Use UNIFI_* prefix to distinguish from Terraform stub credentials
+          echo "UNIFI_CONTROLLER_URL=${{ secrets.UNIFI_URL || 'https://unifi.example.com:8443' }}" >> $GITHUB_ENV
+          echo "UNIFI_USERNAME=${{ secrets.UNIFI_USERNAME || '' }}" >> $GITHUB_ENV
+          echo "UNIFI_PASSWORD=${{ secrets.UNIFI_PASSWORD || '' }}" >> $GITHUB_ENV
+          echo "UNIFI_ALLOW_INSECURE=false" >> $GITHUB_ENV
+
+          # Validate credentials are set
+          if [ -z "${{ secrets.UNIFI_USERNAME }}" ] || [ -z "${{ secrets.UNIFI_PASSWORD }}" ]; then
+            echo "⚠️  WARNING: UniFi credentials not configured in GitHub Secrets"
+            echo "   Python plan will be skipped"
+            echo "   Add UNIFI_URL, UNIFI_USERNAME, UNIFI_PASSWORD secrets to enable"
+            echo "skip_python_plan=true" >> $GITHUB_OUTPUT
+          else
+            echo "✅ UniFi credentials configured"
+            echo "skip_python_plan=false" >> $GITHUB_OUTPUT
+          fi
+
       - name: Terraform Validate
         if: steps.check-site.outputs.skip != 'true'
         working-directory: terraform
@@ -360,6 +402,156 @@ jobs:
           else
             echo "⚠️  Failed to generate structured diff"
           fi
+
+      - name: Download state files (if available)
+        id: download-state
+        if: steps.check-site.outputs.skip != 'true'
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          SITE="${{ matrix.site }}"
+          STATE_FILE="state/${SITE}-networks.json"
+
+          echo "📥 Attempting to download previous state file..."
+
+          # Create state directory
+          mkdir -p state
+
+          # Try to find most recent apply run with state artifact
+          # Search last 10 workflow runs for apply workflow
+          APPLY_RUNS=$(gh run list \
+            --workflow=unifi-apply.yaml \
+            --status=success \
+            --limit=10 \
+            --json databaseId \
+            --jq '.[].databaseId')
+
+          FOUND_STATE=false
+          for RUN_ID in $APPLY_RUNS; do
+            echo "  Checking run $RUN_ID for state artifact..."
+            if gh run download "$RUN_ID" \
+              --name "network-state-${SITE}" \
+              --dir state 2>/dev/null; then
+              echo "✅ Found state file from run $RUN_ID"
+              FOUND_STATE=true
+              echo "state_downloaded=true" >> $GITHUB_OUTPUT
+              break
+            fi
+          done
+
+          if [ "$FOUND_STATE" = "false" ]; then
+            echo "ℹ️  No previous state file found"
+            echo "   Python plan will run without recorded state (2-way diff)"
+            echo "state_downloaded=false" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Python Plan (UniFi API - Live State)
+        id: python-plan
+        if: |
+          steps.check-site.outputs.skip != 'true' &&
+          steps.configure-unifi.outputs.skip_python_plan != 'true'
+        continue-on-error: true
+        run: |
+          SITE="${{ matrix.site }}"
+          TFVARS_FILE="artifacts/tfvars/site-${SITE}.tfvars.json"
+          STATE_FILE="state/${SITE}-networks.json"
+          PLAN_OUTPUT="terraform/python-plan-${SITE}.txt"
+
+          echo "🔍 Running Python plan for site: $SITE"
+          echo "   Using tfvars: $TFVARS_FILE"
+          echo "   State file: $STATE_FILE"
+          echo ""
+
+          # Create terraform directory if it doesn't exist
+          mkdir -p terraform
+
+          # Run Python plan and capture output
+          if python3 scripts/plan_unifi.py \
+              --tfvars "$TFVARS_FILE" \
+              --site "$SITE" \
+              --state-file "$STATE_FILE" \
+              2>&1 | tee "$PLAN_OUTPUT"; then
+            PLAN_EXIT_CODE=${PIPESTATUS[0]}
+          else
+            PLAN_EXIT_CODE=$?
+          fi
+
+          echo ""
+          echo "plan_exit_code=$PLAN_EXIT_CODE" >> $GITHUB_OUTPUT
+
+          # Interpret exit code
+          if [ $PLAN_EXIT_CODE -eq 0 ]; then
+            echo "✅ Python plan: No changes detected"
+            echo "plan_status=clean" >> $GITHUB_OUTPUT
+            echo "plan_has_changes=false" >> $GITHUB_OUTPUT
+          elif [ $PLAN_EXIT_CODE -eq 2 ]; then
+            echo "ℹ️  Python plan: Changes detected"
+            echo "plan_status=changes" >> $GITHUB_OUTPUT
+            echo "plan_has_changes=true" >> $GITHUB_OUTPUT
+          else
+            echo "⚠️  Python plan failed with exit code $PLAN_EXIT_CODE"
+            echo "   This may indicate:"
+            echo "   - UniFi controller is unreachable"
+            echo "   - Invalid credentials"
+            echo "   - Network connectivity issues"
+            echo "plan_status=failed" >> $GITHUB_OUTPUT
+            echo "plan_has_changes=unknown" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Generate Python Plan Summary (JSON)
+        if: |
+          steps.check-site.outputs.skip != 'true' &&
+          steps.python-plan.outputs.plan_status != 'failed' &&
+          steps.python-plan.outputs.plan_status != ''
+        working-directory: terraform
+        run: |
+          SITE="${{ matrix.site }}"
+          PLAN_OUTPUT="python-plan-${SITE}.txt"
+          SUMMARY_FILE="python-plan-${SITE}-summary.json"
+
+          echo "📊 Generating Python plan summary..."
+
+          # Parse plan output to extract counts
+          # This is a simple parser - plan_unifi.py could be
+          # enhanced to output JSON directly
+          TO_CREATE=$(grep -oP "Networks to CREATE: \K\d+" \
+            "$PLAN_OUTPUT" || echo "0")
+          TO_UPDATE=$(grep -oP "Networks to UPDATE: \K\d+" \
+            "$PLAN_OUTPUT" || echo "0")
+          TO_DELETE=$(grep -oP "Networks to DELETE: \K\d+" \
+            "$PLAN_OUTPUT" || echo "0")
+          DRIFT_COUNT=$(grep -oP "DRIFT DETECTED: \K\d+" \
+            "$PLAN_OUTPUT" || echo "0")
+
+          # Check if clean
+          if [ "${{ steps.python-plan.outputs.plan_has_changes }}" = "false" ]
+          then
+            IS_CLEAN=true
+          else
+            IS_CLEAN=false
+          fi
+
+          # Generate JSON summary
+          cat > "$SUMMARY_FILE" << EOF
+          {
+            "site": "${SITE}",
+            "is_clean": ${IS_CLEAN},
+            "exit_code": ${{ steps.python-plan.outputs.plan_exit_code }},
+            "changes": {
+              "to_create": ${TO_CREATE},
+              "to_update": ${TO_UPDATE},
+              "to_delete": ${TO_DELETE}
+            },
+            "drift_detected": $([ "$DRIFT_COUNT" -gt 0 ] && echo "true" \
+              || echo "false"),
+            "drift_count": ${DRIFT_COUNT},
+            "state_available": ${{ steps.download-state.outputs.state_downloaded || 'false' }}
+          }
+          EOF
+
+          echo "✅ Summary generated: $SUMMARY_FILE"
+          cat "$SUMMARY_FILE"
 
       - name: Evaluate Policy with OPA
         id: policy
@@ -526,6 +718,8 @@ jobs:
             terraform/tfplan-${{ matrix.site }}-approval.json
             terraform/tfplan-${{ matrix.site }}-decision.json
             terraform/tfplan-${{ matrix.site }}-explanation.txt
+            terraform/python-plan-${{ matrix.site }}.txt
+            terraform/python-plan-${{ matrix.site }}-summary.json
           retention-days: 30
 
       # BACKWARD COMPATIBILITY: Upload with legacy name during transition (30 days)
@@ -541,6 +735,8 @@ jobs:
             terraform/tfplan-${{ matrix.site }}-approval.json
             terraform/tfplan-${{ matrix.site }}-decision.json
             terraform/tfplan-${{ matrix.site }}-explanation.txt
+            terraform/python-plan-${{ matrix.site }}.txt
+            terraform/python-plan-${{ matrix.site }}-summary.json
           retention-days: 30
 
       - name: Plan Summary
@@ -623,16 +819,116 @@ jobs:
             echo "" >> $GITHUB_STEP_SUMMARY
           fi
 
+          # Add Python Plan section
           cat >> $GITHUB_STEP_SUMMARY << 'EOF'
 
-          ### Schema Validation
+          ---
+
+          ## Python Plan (UniFi API - Live State)
+
+          EOF
+
+          # Check if Python plan ran
+          PYTHON_PLAN_FILE="terraform/python-plan-${{ matrix.site }}.txt"
+          PYTHON_SUMMARY_FILE="terraform/python-plan-${{ matrix.site }}-summary.json"
+
+          if [ "${{ steps.configure-unifi.outputs.skip_python_plan }}" = "true" ]; then
+            cat >> $GITHUB_STEP_SUMMARY << 'EOF'
+          ⚠️ **Python plan was skipped** - UniFi credentials not configured
+
+          To enable real drift detection:
+          1. Add GitHub Secrets: UNIFI_URL, UNIFI_USERNAME, UNIFI_PASSWORD
+          2. Re-run workflow
+
+          EOF
+          elif [ "${{ steps.python-plan.outputs.plan_status }}" = "failed" ]; then
+            cat >> $GITHUB_STEP_SUMMARY << 'EOF'
+          ❌ **Python plan failed** - See logs for details
+
+          Possible causes:
+          - UniFi controller unreachable
+          - Invalid credentials
+          - Network connectivity issues
+
+          EOF
+          elif [ "${{ steps.python-plan.outputs.plan_status }}" = "" ]; then
+            cat >> $GITHUB_STEP_SUMMARY << 'EOF'
+          ℹ️ **Python plan did not run** - Terraform validation may have failed
+
+          EOF
+          else
+            # Show Python plan results
+            if [ -f "$PYTHON_SUMMARY_FILE" ]; then
+              TO_CREATE=$(jq -r '.changes.to_create' "$PYTHON_SUMMARY_FILE")
+              TO_UPDATE=$(jq -r '.changes.to_update' "$PYTHON_SUMMARY_FILE")
+              TO_DELETE=$(jq -r '.changes.to_delete' "$PYTHON_SUMMARY_FILE")
+              DRIFT_COUNT=$(jq -r '.drift_count' "$PYTHON_SUMMARY_FILE")
+              IS_CLEAN=$(jq -r '.is_clean' "$PYTHON_SUMMARY_FILE")
+
+              if [ "$IS_CLEAN" = "true" ]; then
+                cat >> $GITHUB_STEP_SUMMARY << 'EOF'
+          ✅ **No changes detected** - Infrastructure matches desired state
+
+          EOF
+              else
+                cat >> $GITHUB_STEP_SUMMARY << PYEOF
+          📝 **Changes detected:**
+
+          - **Create**: ${TO_CREATE} network(s)
+          - **Update**: ${TO_UPDATE} network(s)
+          - **Delete**: ${TO_DELETE} network(s)
+
+          PYEOF
+
+                if [ "$DRIFT_COUNT" -gt 0 ]; then
+                  cat >> $GITHUB_STEP_SUMMARY << DRIFTEOF
+          ⚠️ **Drift detected**: ${DRIFT_COUNT} network(s) modified outside this tool
+
+          DRIFTEOF
+                fi
+              fi
+            fi
+
+            # Show full plan output
+            if [ -f "$PYTHON_PLAN_FILE" ]; then
+              cat >> $GITHUB_STEP_SUMMARY << 'EOF'
+
+          ### Detailed Plan Output
+
+          ```
+          EOF
+              cat "$PYTHON_PLAN_FILE" >> $GITHUB_STEP_SUMMARY
+              cat >> $GITHUB_STEP_SUMMARY << 'EOF'
+          ```
+
+          EOF
+            fi
+
+            cat >> $GITHUB_STEP_SUMMARY << 'EOF'
+
+          ### Artifacts
+          - **Plan output**: `python-plan-${{ matrix.site }}.txt`
+          - **Summary**: `python-plan-${{ matrix.site }}-summary.json`
+
+          EOF
+          fi
+
+          cat >> $GITHUB_STEP_SUMMARY << 'EOF'
+
+          ---
+
+          ### Schema Validation (Terraform)
           - ✅ Provider schema validated
           - ✅ Configuration syntax valid
           - ✅ Variable definitions match
 
-          ### Notes
-          This plan was generated in stub mode without actual UniFi controller access.
-          For actual deployment, real credentials and connectivity would be required.
+          ### Architecture Notes
+          This workflow uses a **hybrid approach**:
+          - **Terraform Plan**: Schema validation only (stub credentials)
+          - **Python Plan**: Real drift detection (live UniFi API)
+
+          The Terraform plan validates configuration schemas without controller access.
+          The Python plan shows actual state from the UniFi controller.
 
           See [terraform/README.md](terraform/README.md) for configuration details.
           EOF
