@@ -299,7 +299,7 @@ jobs:
             # Only set UNIFI_* variables if secrets exist
             # This prevents empty strings from being set, which would
             # cause the UniFi client to fall back to TF_VAR_* stub values
-            echo "UNIFI_CONTROLLER_URL=${{ secrets.UNIFI_URL }}" >> $GITHUB_ENV
+            # echo "UNIFI_CONTROLLER_URL=${{ secrets.UNIFI_URL }}" >> $GITHUB_ENV
             echo "UNIFI_USERNAME=${{ secrets.UNIFI_USERNAME }}" >> $GITHUB_ENV
             echo "UNIFI_PASSWORD=${{ secrets.UNIFI_PASSWORD }}" >> $GITHUB_ENV
 
